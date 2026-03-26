@@ -1,11 +1,9 @@
-import { getCookie } from '@dropins/tools/lib.js';
-import * as authApi from '@dropins/storefront-auth/api.js';
-import { render as authRenderer } from '@dropins/storefront-auth/render.js';
-import { SignIn } from '@dropins/storefront-auth/containers/SignIn.js';
-import { events } from '@dropins/tools/event-bus.js';
+import { events } from '../../scripts/oro-events.js';
+import { logout } from '../../scripts/oro-api.js';
 import {
-  CUSTOMER_FORGOTPASSWORD_PATH,
   rootLink,
+  checkIsAuthenticated,
+  CUSTOMER_LOGIN_PATH,
 } from '../../scripts/commerce.js';
 
 function checkAndRedirect(redirections) {
@@ -16,14 +14,6 @@ function checkAndRedirect(redirections) {
     }
     return false;
   });
-}
-
-function renderSignIn(element) {
-  authRenderer.render(SignIn, {
-    onSuccessCallback: () => {},
-    formSize: 'small',
-    routeForgotPassword: () => rootLink(CUSTOMER_FORGOTPASSWORD_PATH),
-  })(element);
 }
 
 export function renderAuthDropdown(navTools) {
@@ -53,48 +43,51 @@ export function renderAuthDropdown(navTools) {
 
   authDropDownPanel.addEventListener('click', (e) => e.stopPropagation());
 
-  async function toggleDropDownAuthMenu(state) {
+  function toggleDropDownAuthMenu(state) {
     const show = state ?? !authDropDownPanel.classList.contains('nav-tools-panel--show');
-
     authDropDownPanel.classList.toggle('nav-tools-panel--show', show);
     authDropDownPanel.setAttribute('role', 'dialog');
-    authDropDownPanel.setAttribute('aria-hidden', 'false');
-    authDropDownPanel.setAttribute('aria-labelledby', 'modal-title');
-    authDropDownPanel.setAttribute('aria-describedby', 'modal-description');
-    authDropDownPanel.focus();
+    authDropDownPanel.setAttribute('aria-hidden', String(!show));
   }
 
   loginButton.addEventListener('click', () => toggleDropDownAuthMenu());
-  document.addEventListener('click', async (e) => {
+  document.addEventListener('click', (e) => {
     const clickOnDropDownPanel = authDropDownPanel.contains(e.target);
     const clickOnLoginButton = loginButton.contains(e.target);
 
     if (!clickOnDropDownPanel && !clickOnLoginButton) {
-      await toggleDropDownAuthMenu(false);
+      toggleDropDownAuthMenu(false);
     }
   });
 
   logoutButtonElement.addEventListener('click', async () => {
-    await authApi.revokeCustomerToken();
+    await logout();
     checkAndRedirect({
-      '/customer': rootLink('/customer/login'),
+      '/customer': rootLink(CUSTOMER_LOGIN_PATH),
       '/order-details': rootLink('/'),
     });
   });
 
-  renderSignIn(authDropinContainer);
+  // Render a simple login link for guests instead of drop-in SignIn
+  function renderGuestAuth() {
+    authDropinContainer.innerHTML = `
+      <div class="oro-auth-guest">
+        <a href="${rootLink(CUSTOMER_LOGIN_PATH)}" class="dropin-button dropin-button--primary">Sign In</a>
+      </div>
+    `;
+  }
 
-  const updateDropDownUI = (isAuthenticated) => {
-    const getUserTokenCookie = getCookie('auth_dropin_user_token');
-    const getUserNameCookie = getCookie('auth_dropin_firstname');
+  const updateDropDownUI = (authState) => {
+    const isAuthenticated = authState ? !authState.isGuest : checkIsAuthenticated();
 
-    if (isAuthenticated || getUserTokenCookie) {
+    if (isAuthenticated) {
       authDropDownMenuList.style.display = 'block';
       authDropinContainer.style.display = 'none';
-      loginButton.textContent = `Hi, ${getUserNameCookie}`;
+      loginButton.textContent = 'My Account';
     } else {
       authDropDownMenuList.style.display = 'none';
       authDropinContainer.style.display = 'block';
+      renderGuestAuth();
       loginButton.innerHTML = `
       <svg
           width="25"
@@ -109,9 +102,9 @@ export function renderAuthDropdown(navTools) {
     }
   };
 
-  events.on('authenticated', (isAuthenticated) => {
-    updateDropDownUI(isAuthenticated);
+  events.on('oro/authenticated', (authState) => {
+    updateDropDownUI(authState);
   });
 
-  updateDropDownUI();
+  updateDropDownUI(null);
 }

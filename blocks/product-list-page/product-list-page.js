@@ -1,32 +1,23 @@
-// Product Discovery Dropins
-import SearchResults from '@dropins/storefront-product-discovery/containers/SearchResults.js';
-import Facets from '@dropins/storefront-product-discovery/containers/Facets.js';
-import SortBy from '@dropins/storefront-product-discovery/containers/SortBy.js';
-import Pagination from '@dropins/storefront-product-discovery/containers/Pagination.js';
-import { render as provider } from '@dropins/storefront-product-discovery/render.js';
-import { Button, Icon, provider as UI } from '@dropins/tools/components.js';
-import { search } from '@dropins/storefront-product-discovery/api.js';
-// Wishlist Dropin
-import { WishlistToggle } from '@dropins/storefront-wishlist/containers/WishlistToggle.js';
-import { render as wishlistRender } from '@dropins/storefront-wishlist/render.js';
-// Cart Dropin
-import * as cartApi from '@dropins/storefront-cart/api.js';
-import { tryRenderAemAssetsImage } from '@dropins/tools/lib/aem/assets.js';
-// Event Bus
-import { events } from '@dropins/tools/event-bus.js';
-// AEM
+import { listProducts, addToShoppingList, isGuest } from '../../scripts/oro-api.js';
+import { events } from '../../scripts/oro-events.js';
+import {
+  formatPrice,
+  getProductImageUrl,
+  getProductPrice,
+} from '../../scripts/oro-utils.js';
 import { readBlockConfig } from '../../scripts/aem.js';
-import { fetchPlaceholders, getProductLink } from '../../scripts/commerce.js';
-
-// Initializers
-import '../../scripts/initializers/search.js';
-import '../../scripts/initializers/wishlist.js';
+import {
+  fetchPlaceholders,
+  getProductLink,
+  rootLink,
+  CUSTOMER_LOGIN_PATH,
+} from '../../scripts/commerce.js';
 
 export default async function decorate(block) {
   const labels = await fetchPlaceholders();
-
   const config = readBlockConfig(block);
 
+  // Build DOM skeleton (same structure as original)
   const fragment = document.createRange().createContextualFragment(`
     <div class="search__wrapper">
       <div class="search__result-info"></div>
@@ -48,244 +39,180 @@ export default async function decorate(block) {
   block.innerHTML = '';
   block.appendChild(fragment);
 
-  // Add category url path to block for enrichment
   if (config.urlpath) {
     block.dataset.category = config.urlpath;
   }
 
-  // Get variables from the URL
+  // Parse URL params
   const urlParams = new URLSearchParams(window.location.search);
-  // get all params
-  const {
-    q,
-    page,
-    sort,
-    filter,
-  } = Object.fromEntries(urlParams.entries());
+  const q = urlParams.get('q') || '';
+  let currentPage = Number(urlParams.get('page')) || 1;
+  let currentSort = urlParams.get('sort') || '';
 
-  // Request search based on the page type on block load
-  if (config.urlpath) {
-    // If it's a category page...
-    await search({
-      phrase: '', // search all products in the category
-      currentPage: page ? Number(page) : 1,
-      pageSize: 8,
-      sort: sort ? getSortFromParams(sort) : [{ attribute: 'position', direction: 'DESC' }],
-      filter: [
-        { attribute: 'categoryPath', eq: config.urlpath }, // Add category filter
-        ...getFilterFromParams(filter),
-      ],
-    }).catch(() => {
-      console.error('Error searching for products');
-    });
-  } else {
-    // If it's a search page...
-    await search({
-      phrase: q || '',
-      currentPage: page ? Number(page) : 1,
-      pageSize: 8,
-      sort: getSortFromParams(sort),
-      filter: getFilterFromParams(filter),
-    }).catch(() => {
-      console.error('Error searching for products');
-    });
+  const pageSize = 8;
+  const { baseUrl } = await getOroConfig();
+
+  // Render filter toggle button
+  const filterBtn = document.createElement('button');
+  filterBtn.className = 'dropin-button dropin-button--secondary';
+  filterBtn.textContent = labels.Global?.Filters || 'Filters';
+  filterBtn.addEventListener('click', () => {
+    $facets.classList.toggle('search__facets--visible');
+  });
+  $viewFacets.appendChild(filterBtn);
+
+  // Render sort dropdown
+  const sortSelect = document.createElement('select');
+  sortSelect.className = 'search__sort-select';
+  sortSelect.innerHTML = `
+    <option value="">Relevance</option>
+    <option value="name">Name A-Z</option>
+    <option value="-name">Name Z-A</option>
+    <option value="minimalPrice">Price Low-High</option>
+    <option value="-minimalPrice">Price High-Low</option>
+  `;
+  if (currentSort) sortSelect.value = currentSort;
+  sortSelect.addEventListener('change', () => {
+    currentSort = sortSelect.value;
+    currentPage = 1;
+    loadAndRender(); // eslint-disable-line no-use-before-define
+  });
+  $productSort.appendChild(sortSelect);
+
+  async function loadAndRender() {
+    $productList.innerHTML = '<div class="search__loading">Loading...</div>';
+
+    try {
+      const result = await listProducts({
+        page: currentPage,
+        pageSize,
+        categoryId: config.urlpath || undefined,
+        search: q || undefined,
+        sort: currentSort || undefined,
+      });
+
+      renderResults(result);
+      renderPagination(result);
+      updateUrl();
+    } catch (err) {
+      console.error('Error loading products:', err);
+      $productList.innerHTML = '<p>Error loading products. Please try again.</p>';
+    }
   }
 
-  const getAddToCartButton = (product) => {
-    if (product.typename === 'ComplexProductView') {
-      const button = document.createElement('div');
-      UI.render(Button, {
-        children: labels.Global?.AddProductToCart,
-        icon: Icon({ source: 'Cart' }),
-        href: getProductLink(product.urlKey, product.sku),
-        variant: 'primary',
-      })(button);
-      return button;
-    }
-    const button = document.createElement('div');
-    UI.render(Button, {
-      children: labels.Global?.AddProductToCart,
-      icon: Icon({ source: 'Cart' }),
-      onClick: () => cartApi.addProductsToCart([{ sku: product.sku, quantity: 1 }]),
-      variant: 'primary',
-    })(button);
-    return button;
-  };
-
-  await Promise.all([
-    // Sort By
-    provider.render(SortBy, {})($productSort),
-
-    // Pagination
-    provider.render(Pagination, {
-      onPageChange: () => {
-        // scroll to the top of the page
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      },
-    })($pagination),
-
-    // View Facets Button
-    UI.render(Button, {
-      children: labels.Global?.Filters,
-      icon: Icon({ source: 'Burger' }),
-      variant: 'secondary',
-      onClick: () => {
-        $facets.classList.toggle('search__facets--visible');
-      },
-    })($viewFacets),
-
-    // Facets
-    provider.render(Facets, {})($facets),
-    // Product List
-    provider.render(SearchResults, {
-      routeProduct: (product) => getProductLink(product.urlKey, product.sku),
-      slots: {
-        ProductImage: (ctx) => {
-          const { product, defaultImageProps } = ctx;
-          const anchorWrapper = document.createElement('a');
-          anchorWrapper.href = getProductLink(product.urlKey, product.sku);
-
-          tryRenderAemAssetsImage(ctx, {
-            alias: product.sku,
-            imageProps: defaultImageProps,
-            wrapper: anchorWrapper,
-            params: {
-              width: defaultImageProps.width,
-              height: defaultImageProps.height,
-            },
-          });
-        },
-        ProductActions: (ctx) => {
-          const actionsWrapper = document.createElement('div');
-          actionsWrapper.className = 'product-discovery-product-actions';
-          // Add to Cart Button
-          const addToCartBtn = getAddToCartButton(ctx.product);
-          addToCartBtn.className = 'product-discovery-product-actions__add-to-cart';
-          // Wishlist Button
-          const $wishlistToggle = document.createElement('div');
-          $wishlistToggle.classList.add('product-discovery-product-actions__wishlist-toggle');
-          wishlistRender.render(WishlistToggle, {
-            product: ctx.product,
-            variant: 'tertiary',
-          })($wishlistToggle);
-          actionsWrapper.appendChild(addToCartBtn);
-          actionsWrapper.appendChild($wishlistToggle);
-          ctx.replaceWith(actionsWrapper);
-        },
-      },
-    })($productList),
-  ]);
-
-  // Listen for search results (event is fired before the block is rendered; eager: true)
-  events.on('search/result', (payload) => {
-    const totalCount = payload.result?.totalCount || 0;
+  function renderResults(result) {
+    const { products, totalCount } = result;
 
     block.classList.toggle('product-list-page--empty', totalCount === 0);
 
-    // Results Info
-    $resultInfo.innerHTML = payload.request?.phrase
-      ? `${totalCount} results found for <strong>"${payload.request.phrase}"</strong>.`
+    // Result info
+    $resultInfo.innerHTML = q
+      ? `${totalCount} results found for <strong>"${q}"</strong>.`
       : `${totalCount} results found.`;
 
-    // Update the view facets button with the number of filters
-    if (payload.request.filter.length > 0) {
-      $viewFacets.querySelector('button').setAttribute('data-count', payload.request.filter.length);
-    } else {
-      $viewFacets.querySelector('button').removeAttribute('data-count');
-    }
-  }, { eager: true });
+    // Product grid
+    $productList.innerHTML = '';
 
-  // Listen for search results (event is fired after the block is rendered; eager: false)
-  events.on('search/result', (payload) => {
-    // update URL with new search params
+    if (totalCount === 0) {
+      $productList.innerHTML = '<p class="search__no-results">No products found.</p>';
+      return;
+    }
+
+    products.forEach((product) => {
+      const { attributes } = product;
+      const name = attributes.name || attributes.names?.default || '';
+      const { sku } = attributes;
+      const priceData = getProductPrice(product);
+      const imageUrl = getProductImageUrl(product, baseUrl);
+      const productUrl = getProductLink(sku, sku);
+
+      const card = document.createElement('div');
+      card.className = 'search__product-card';
+
+      const imgHtml = imageUrl
+        ? `<a href="${productUrl}"><img src="${imageUrl}" alt="${name}" loading="lazy" width="300" height="300" /></a>`
+        : `<a href="${productUrl}"><div class="search__product-card-placeholder"></div></a>`;
+
+      card.innerHTML = `
+        ${imgHtml}
+        <h3><a href="${productUrl}">${name}</a></h3>
+        <span class="search__product-price">${priceData ? formatPrice(priceData.price, priceData.currency) : ''}</span>
+        <div class="product-discovery-product-actions">
+          <div class="product-discovery-product-actions__add-to-cart">
+            <button class="dropin-button dropin-button--primary">${labels.Global?.AddProductToCart || 'Add to Cart'}</button>
+          </div>
+        </div>
+      `;
+
+      const addBtn = card.querySelector('.product-discovery-product-actions__add-to-cart button');
+      addBtn.addEventListener('click', async () => {
+        if (isGuest()) {
+          window.location.href = rootLink(`${CUSTOMER_LOGIN_PATH}?returnUrl=${encodeURIComponent(window.location.pathname)}`);
+          return;
+        }
+        addBtn.disabled = true;
+        addBtn.textContent = 'Adding...';
+        try {
+          const units = attributes.unitPrecisions;
+          const unitCode = units?.[0]?.unit?.id || 'item';
+          await addToShoppingList(product.id, 1, unitCode);
+          addBtn.textContent = 'Added!';
+          setTimeout(() => {
+            addBtn.textContent = labels.Global?.AddProductToCart || 'Add to Cart';
+            addBtn.disabled = false;
+          }, 2000);
+        } catch (err) {
+          console.error('Add to cart failed:', err);
+          addBtn.textContent = labels.Global?.AddProductToCart || 'Add to Cart';
+          addBtn.disabled = false;
+        }
+      });
+
+      $productList.appendChild(card);
+    });
+  }
+
+  function renderPagination(result) {
+    const { totalPages, page: activePage } = result;
+    $pagination.innerHTML = '';
+
+    if (totalPages <= 1) return;
+
+    for (let i = 1; i <= totalPages; i += 1) {
+      const btn = document.createElement('button');
+      btn.className = `search__page-btn${i === activePage ? ' search__page-btn--active' : ''}`;
+      btn.textContent = i;
+      btn.addEventListener('click', () => {
+        currentPage = i;
+        loadAndRender();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+      $pagination.appendChild(btn);
+    }
+  }
+
+  function updateUrl() {
     const url = new URL(window.location.href);
-
-    if (payload.request?.phrase) {
-      url.searchParams.set('q', payload.request.phrase);
+    if (q) url.searchParams.set('q', q);
+    if (currentPage > 1) {
+      url.searchParams.set('page', currentPage);
+    } else {
+      url.searchParams.delete('page');
     }
-
-    if (payload.request?.currentPage) {
-      url.searchParams.set('page', payload.request.currentPage);
+    if (currentSort) {
+      url.searchParams.set('sort', currentSort);
+    } else {
+      url.searchParams.delete('sort');
     }
-
-    if (payload.request?.sort) {
-      url.searchParams.set('sort', getParamsFromSort(payload.request.sort));
-    }
-
-    if (payload.request?.filter) {
-      url.searchParams.set('filter', getParamsFromFilter(payload.request.filter));
-    }
-
-    // Update the URL
     window.history.pushState({}, '', url.toString());
-  }, { eager: false });
+  }
+
+  // Initial load
+  await loadAndRender();
 }
 
-function getSortFromParams(sortParam) {
-  if (!sortParam) return [];
-  return sortParam.split(',').map((item) => {
-    const [attribute, direction] = item.split('_');
-    return { attribute, direction };
-  });
-}
-
-function getParamsFromSort(sort) {
-  return sort.map((item) => `${item.attribute}_${item.direction}`).join(',');
-}
-
-function getFilterFromParams(filterParam) {
-  if (!filterParam) return [];
-
-  // Decode the URL-encoded parameter
-  const decodedParam = decodeURIComponent(filterParam);
-  const results = [];
-  const filters = decodedParam.split('|');
-
-  filters.forEach((filter) => {
-    if (filter.includes(':')) {
-      const [attribute, value] = filter.split(':');
-
-      if (value.includes(',')) {
-        // Handle array values (like categories)
-        results.push({
-          attribute,
-          in: value.split(','),
-        });
-      } else if (value.includes('-')) {
-        // Handle range values (like price)
-        const [from, to] = value.split('-');
-        results.push({
-          attribute,
-          range: {
-            from: Number(from),
-            to: Number(to),
-          },
-        });
-      } else {
-        // Handle single values (like categories with one value)
-        results.push({
-          attribute,
-          in: [value],
-        });
-      }
-    }
-  });
-
-  return results;
-}
-
-function getParamsFromFilter(filter) {
-  if (!filter || filter.length === 0) return '';
-
-  return filter.map(({ attribute, in: inValues, range }) => {
-    if (inValues) {
-      return `${attribute}:${inValues.join(',')}`;
-    }
-
-    if (range) {
-      return `${attribute}:${range.from}-${range.to}`;
-    }
-
-    return null;
-  }).filter(Boolean).join('|');
+async function getOroConfig() {
+  const { getConfig } = await import('../../scripts/oro-api.js');
+  const cfg = getConfig();
+  return { baseUrl: cfg?.baseUrl || '' };
 }

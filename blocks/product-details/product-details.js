@@ -1,88 +1,28 @@
 import {
-  InLineAlert,
-  Icon,
-  Button,
-  provider as UI,
-} from '@dropins/tools/components.js';
-import { h } from '@dropins/tools/preact.js';
-import { events } from '@dropins/tools/event-bus.js';
-import { tryRenderAemAssetsImage } from '@dropins/tools/lib/aem/assets.js';
-import * as pdpApi from '@dropins/storefront-pdp/api.js';
-import { render as pdpRendered } from '@dropins/storefront-pdp/render.js';
-import { render as wishlistRender } from '@dropins/storefront-wishlist/render.js';
-
-import { WishlistToggle } from '@dropins/storefront-wishlist/containers/WishlistToggle.js';
-import { WishlistAlert } from '@dropins/storefront-wishlist/containers/WishlistAlert.js';
-
-// Containers
-import ProductHeader from '@dropins/storefront-pdp/containers/ProductHeader.js';
-import ProductPrice from '@dropins/storefront-pdp/containers/ProductPrice.js';
-import ProductShortDescription from '@dropins/storefront-pdp/containers/ProductShortDescription.js';
-import ProductOptions from '@dropins/storefront-pdp/containers/ProductOptions.js';
-import ProductQuantity from '@dropins/storefront-pdp/containers/ProductQuantity.js';
-import ProductDescription from '@dropins/storefront-pdp/containers/ProductDescription.js';
-import ProductAttributes from '@dropins/storefront-pdp/containers/ProductAttributes.js';
-import ProductGallery from '@dropins/storefront-pdp/containers/ProductGallery.js';
-import ProductGiftCardOptions from '@dropins/storefront-pdp/containers/ProductGiftCardOptions.js';
-
-// Libs
+  getProduct,
+  addToShoppingList,
+  isGuest,
+  getConfig,
+} from '../../scripts/oro-api.js';
+import { events } from '../../scripts/oro-events.js';
+import {
+  getAllProductImageUrls,
+  getProductPrice,
+  formatPrice,
+} from '../../scripts/oro-utils.js';
 import {
   rootLink,
   setJsonLd,
   fetchPlaceholders,
-  getProductLink,
+  getProductSku,
+  CUSTOMER_LOGIN_PATH,
 } from '../../scripts/commerce.js';
-
-// Initializers
-import { IMAGES_SIZES } from '../../scripts/initializers/pdp.js';
-import '../../scripts/initializers/cart.js';
-import '../../scripts/initializers/wishlist.js';
-
-/**
- * Checks if the page has prerendered product JSON-LD data
- * @returns {boolean} True if product JSON-LD exists and contains @type=Product
- */
-function isProductPrerendered() {
-  const jsonLdScript = document.querySelector('script[type="application/ld+json"]');
-
-  if (!jsonLdScript?.textContent) {
-    return false;
-  }
-
-  try {
-    const jsonLd = JSON.parse(jsonLdScript.textContent);
-    return jsonLd?.['@type'] === 'Product';
-  } catch (error) {
-    console.debug('Failed to parse JSON-LD:', error);
-    return false;
-  }
-}
-
-// Function to update the Add to Cart button text
-function updateAddToCartButtonText(addToCartInstance, inCart, labels) {
-  const buttonText = inCart
-    ? labels.Global?.UpdateProductInCart
-    : labels.Global?.AddProductToCart;
-  if (addToCartInstance) {
-    addToCartInstance.setProps((prev) => ({
-      ...prev,
-      children: buttonText,
-    }));
-  }
-}
+import { getMetadata } from '../../scripts/aem.js';
 
 export default async function decorate(block) {
-  const product = events.lastPayload('pdp/data') ?? null;
   const labels = await fetchPlaceholders();
 
-  // Read itemUid from URL
-  const urlParams = new URLSearchParams(window.location.search);
-  const itemUidFromUrl = urlParams.get('itemUid');
-
-  // State to track if we are in update mode
-  let isUpdateMode = false;
-
-  // Layout
+  // Layout — same DOM skeleton as original
   const fragment = document.createRange().createContextualFragment(`
     <div class="product-details__alert"></div>
     <div class="product-details__wrapper">
@@ -110,427 +50,335 @@ export default async function decorate(block) {
   `);
 
   const $alert = fragment.querySelector('.product-details__alert');
-  const $gallery = fragment.querySelector('.product-details__gallery');
+  const $gallery = fragment.querySelector('.product-details__left-column .product-details__gallery');
   const $header = fragment.querySelector('.product-details__header');
   const $price = fragment.querySelector('.product-details__price');
   const $galleryMobile = fragment.querySelector('.product-details__right-column .product-details__gallery');
   const $shortDescription = fragment.querySelector('.product-details__short-description');
   const $options = fragment.querySelector('.product-details__options');
   const $quantity = fragment.querySelector('.product-details__quantity');
-  const $giftCardOptions = fragment.querySelector('.product-details__gift-card-options');
   const $addToCart = fragment.querySelector('.product-details__buttons__add-to-cart');
-  const $wishlistToggleBtn = fragment.querySelector('.product-details__buttons__add-to-wishlist');
   const $description = fragment.querySelector('.product-details__description');
   const $attributes = fragment.querySelector('.product-details__attributes');
 
   block.replaceChildren(fragment);
 
-  const gallerySlots = {
-    CarouselThumbnail: (ctx) => {
-      tryRenderAemAssetsImage(ctx, {
-        ...imageSlotConfig(ctx),
-        wrapper: document.createElement('span'),
-      });
-    },
+  // Get product ID from metadata or URL
+  const productId = getMetadata('product-id') || getProductIdFromUrl();
+  if (!productId) {
+    $alert.innerHTML = '<div class="dropin-in-line-alert__content">Product not found.</div>';
+    return;
+  }
 
-    CarouselMainImage: (ctx) => {
-      tryRenderAemAssetsImage(ctx, {
-        ...imageSlotConfig(ctx),
-      });
-    },
-  };
+  // Fetch product
+  let product;
+  try {
+    product = await getProduct(productId);
+  } catch (err) {
+    console.error('Failed to load product:', err);
+    $alert.innerHTML = '<div class="dropin-in-line-alert__content">Failed to load product details.</div>';
+    return;
+  }
 
-  // Alert
-  let inlineAlert = null;
-  const routeToWishlist = '/wishlist';
+  const { attributes } = product;
+  const config = getConfig();
+  const baseUrl = config?.baseUrl || '';
+  const imageUrls = getAllProductImageUrls(product, baseUrl);
+  const priceData = getProductPrice(product);
+  const name = attributes.name || attributes.names?.default || '';
 
-  const [
-    _galleryMobile,
-    _gallery,
-    _header,
-    _price,
-    _shortDescription,
-    _options,
-    _quantity,
-    _giftCardOptions,
-    _description,
-    _attributes,
-    wishlistToggleBtn,
-  ] = await Promise.all([
-    // Gallery (Mobile)
-    pdpRendered.render(ProductGallery, {
-      controls: 'dots',
-      arrows: true,
-      peak: false,
-      gap: 'small',
-      loop: false,
-      imageParams: {
-        ...IMAGES_SIZES,
-      },
+  // Emit product data for other blocks
+  events.emit('oro/pdp/data', product);
 
-      slots: gallerySlots,
-    })($galleryMobile),
+  // --- Render Gallery (Desktop) ---
+  renderGallery($gallery, imageUrls, name, 'thumbnailsColumn');
 
-    // Gallery (Desktop)
-    pdpRendered.render(ProductGallery, {
-      controls: 'thumbnailsColumn',
-      arrows: true,
-      peak: true,
-      gap: 'small',
-      loop: false,
-      imageParams: {
-        ...IMAGES_SIZES,
-      },
+  // --- Render Gallery (Mobile) ---
+  renderGallery($galleryMobile, imageUrls, name, 'dots');
 
-      slots: gallerySlots,
-    })($gallery),
+  // --- Header ---
+  $header.innerHTML = `<h1>${name}</h1><span class="product-details__sku">SKU: ${attributes.sku || ''}</span>`;
 
-    // Header
-    pdpRendered.render(ProductHeader, {})($header),
+  // --- Price ---
+  if (priceData) {
+    $price.innerHTML = `<span class="product-details__price-value">${formatPrice(priceData.price, priceData.currency)}</span>`;
+  }
 
-    // Price
-    pdpRendered.render(ProductPrice, {})($price),
+  // --- Short Description ---
+  if (attributes.shortDescription) {
+    $shortDescription.innerHTML = attributes.shortDescription;
+  }
 
-    // Short Description
-    pdpRendered.render(ProductShortDescription, {})($shortDescription),
+  // --- Unit selector (Oro-specific: unitPrecisions) ---
+  const units = attributes.unitPrecisions || [];
+  let selectedUnit = units.length > 0 ? (units[0].unit?.id || units[0].code || 'item') : 'item';
 
-    // Configuration - Swatches
-    pdpRendered.render(ProductOptions, {
-      hideSelectedValue: false,
-      slots: {
-        SwatchImage: (ctx) => {
-          tryRenderAemAssetsImage(ctx, {
-            ...imageSlotConfig(ctx),
-            wrapper: document.createElement('span'),
-          });
-        },
-      },
-    })($options),
+  if (units.length > 1) {
+    const unitSelect = document.createElement('select');
+    unitSelect.className = 'product-details__unit-select';
+    units.forEach((u) => {
+      const opt = document.createElement('option');
+      const unitId = u.unit?.id || u.code || 'item';
+      opt.value = unitId;
+      opt.textContent = u.unit?.attributes?.label || unitId;
+      unitSelect.appendChild(opt);
+    });
+    unitSelect.value = selectedUnit;
+    unitSelect.addEventListener('change', () => {
+      selectedUnit = unitSelect.value;
+    });
+    $options.appendChild(unitSelect);
+  }
 
-    // Configuration  Quantity
-    pdpRendered.render(ProductQuantity, {})($quantity),
-
-    // Configuration  Gift Card Options
-    pdpRendered.render(ProductGiftCardOptions, {})($giftCardOptions),
-
-    // Description
-    pdpRendered.render(ProductDescription, {})($description),
-
-    // Attributes
-    pdpRendered.render(ProductAttributes, {})($attributes),
-
-    // Wishlist button - WishlistToggle Container
-    wishlistRender.render(WishlistToggle, {
-      product,
-    })($wishlistToggleBtn),
-  ]);
-
-  // Configuration – Button - Add to Cart
-  const addToCart = await UI.render(Button, {
-    children: labels.Global?.AddProductToCart,
-    icon: h(Icon, { source: 'Cart' }),
-    onClick: async () => {
-      const buttonActionText = isUpdateMode
-        ? labels.Global?.UpdatingInCart
-        : labels.Global?.AddingToCart;
-      try {
-        addToCart.setProps((prev) => ({
-          ...prev,
-          children: buttonActionText,
-          disabled: true,
-        }));
-
-        // get the current selection values
-        const values = pdpApi.getProductConfigurationValues();
-        const valid = pdpApi.isProductConfigurationValid();
-
-        // add or update the product in the cart
-        if (valid) {
-          if (isUpdateMode) {
-            // --- Update existing item ---
-            const { updateProductsFromCart } = await import(
-              '@dropins/storefront-cart/api.js'
-            );
-
-            await updateProductsFromCart([{ ...values, uid: itemUidFromUrl }]);
-
-            // --- START REDIRECT ON UPDATE ---
-            const updatedSku = values?.sku;
-            if (updatedSku) {
-              const cartRedirectUrl = new URL(
-                rootLink('/cart'),
-                window.location.origin,
-              );
-              cartRedirectUrl.searchParams.set('itemUid', itemUidFromUrl);
-              window.location.href = cartRedirectUrl.toString();
-            } else {
-              // Fallback if SKU is somehow missing (shouldn't happen in normal flow)
-              console.warn(
-                'Could not retrieve SKU for updated item. Redirecting to cart without parameter.',
-              );
-              window.location.href = rootLink('/cart');
-            }
-            return;
-          }
-          // --- Add new item ---
-          const { addProductsToCart } = await import(
-            '@dropins/storefront-cart/api.js'
-          );
-          await addProductsToCart([{ ...values }]);
-        }
-
-        // reset any previous alerts if successful
-        inlineAlert?.remove();
-      } catch (error) {
-        // add alert message
-        inlineAlert = await UI.render(InLineAlert, {
-          heading: 'Error',
-          description: error.message,
-          icon: h(Icon, { source: 'Warning' }),
-          'aria-live': 'assertive',
-          role: 'alert',
-          onDismiss: () => {
-            inlineAlert.remove();
-          },
-        })($alert);
-
-        // Scroll the alertWrapper into view
-        $alert.scrollIntoView({
-          behavior: 'smooth',
-          block: 'center',
-        });
-      } finally {
-        // Reset button text using the helper function which respects the current mode
-        updateAddToCartButtonText(addToCart, isUpdateMode, labels);
-        // Re-enable button
-        addToCart.setProps((prev) => ({
-          ...prev,
-          disabled: false,
-        }));
-      }
-    },
-  })($addToCart);
-
-  // Lifecycle Events
-  events.on('pdp/valid', (valid) => {
-    // update add to cart button disabled state based on product selection validity
-    addToCart.setProps((prev) => ({ ...prev, disabled: !valid }));
-  }, { eager: true });
-
-  // Handle option changes
-  events.on('pdp/values', () => {
-    if (wishlistToggleBtn) {
-      const configValues = pdpApi.getProductConfigurationValues();
-
-      // Check URL parameter for empty optionsUIDs
-      const urlOptionsUIDs = urlParams.get('optionsUIDs');
-
-      // If URL has empty optionsUIDs parameter, treat as base product (no options)
-      const optionUIDs = urlOptionsUIDs === '' ? undefined : (configValues?.optionsUIDs || undefined);
-
-      wishlistToggleBtn.setProps((prev) => ({
-        ...prev,
-        product: {
-          ...product,
-          optionUIDs,
-        },
-      }));
+  // --- Quantity ---
+  let quantity = 1;
+  const qtyContainer = document.createElement('div');
+  qtyContainer.className = 'product-details__qty-controls';
+  qtyContainer.innerHTML = `
+    <button class="qty-btn qty-minus" aria-label="Decrease quantity">-</button>
+    <input type="number" class="qty-input" min="1" value="1" />
+    <button class="qty-btn qty-plus" aria-label="Increase quantity">+</button>
+  `;
+  const qtyInput = qtyContainer.querySelector('.qty-input');
+  qtyContainer.querySelector('.qty-minus').addEventListener('click', () => {
+    if (quantity > 1) {
+      quantity -= 1;
+      qtyInput.value = quantity;
     }
-  }, { eager: true });
-
-  events.on('wishlist/alert', ({ action, item }) => {
-    wishlistRender.render(WishlistAlert, {
-      action,
-      item,
-      routeToWishlist,
-    })($alert);
-
-    setTimeout(() => {
-      $alert.innerHTML = '';
-    }, 5000);
-
-    setTimeout(() => {
-      $alert.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-      });
-    }, 0);
   });
+  qtyContainer.querySelector('.qty-plus').addEventListener('click', () => {
+    quantity += 1;
+    qtyInput.value = quantity;
+  });
+  qtyInput.addEventListener('change', () => {
+    const val = parseInt(qtyInput.value, 10);
+    quantity = val > 0 ? val : 1;
+    qtyInput.value = quantity;
+  });
+  $quantity.appendChild(qtyContainer);
 
-  // --- Add new event listener for cart/data ---
-  events.on(
-    'cart/data',
-    (cartData) => {
-      let itemIsInCart = false;
-      if (itemUidFromUrl && cartData?.items) {
-        itemIsInCart = cartData.items.some(
-          (item) => item.uid === itemUidFromUrl,
-        );
-      }
-      // Set the update mode state
-      isUpdateMode = itemIsInCart;
-
-      // Update button text based on whether the item is in the cart
-      updateAddToCartButtonText(addToCart, itemIsInCart, labels);
-    },
-    { eager: true },
-  );
-
-  // Set JSON-LD and Meta Tags
-  events.on('aem/lcp', () => {
-    const isPrerendered = isProductPrerendered();
-    if (product && !isPrerendered) {
-      setJsonLdProduct(product);
-      setMetaTags(product);
-      document.title = product.name;
+  // --- Add to Cart Button ---
+  const addBtn = document.createElement('button');
+  addBtn.className = 'dropin-button dropin-button--primary';
+  addBtn.textContent = labels.Global?.AddProductToCart || 'Add to Cart';
+  addBtn.addEventListener('click', async () => {
+    if (isGuest()) {
+      window.location.href = rootLink(`${CUSTOMER_LOGIN_PATH}?returnUrl=${encodeURIComponent(window.location.href)}`);
+      return;
     }
-  }, { eager: true });
+    addBtn.disabled = true;
+    addBtn.textContent = labels.Global?.AddingToCart || 'Adding...';
+    try {
+      await addToShoppingList(product.id, quantity, selectedUnit);
+      addBtn.textContent = 'Added!';
+      setTimeout(() => {
+        addBtn.textContent = labels.Global?.AddProductToCart || 'Add to Cart';
+        addBtn.disabled = false;
+      }, 2000);
+    } catch (err) {
+      console.error('Add to cart failed:', err);
+      showAlert($alert, err.message || 'Failed to add product to cart.');
+      addBtn.textContent = labels.Global?.AddProductToCart || 'Add to Cart';
+      addBtn.disabled = false;
+    }
+  });
+  $addToCart.appendChild(addBtn);
 
-  return Promise.resolve();
+  // --- Description ---
+  if (attributes.description) {
+    $description.innerHTML = `<h2>Description</h2><div>${attributes.description}</div>`;
+  }
+
+  // --- Attributes table ---
+  if (attributes.unitPrecisions?.length > 0) {
+    const rows = attributes.unitPrecisions.map((u) => {
+      const unitLabel = u.unit?.attributes?.label || u.unit?.id || u.code || '';
+      return `<tr><td>Unit</td><td>${unitLabel}</td></tr>`;
+    }).join('');
+    $attributes.innerHTML = `<h2>Specifications</h2><table>${rows}</table>`;
+  }
+
+  // --- JSON-LD ---
+  setJsonLdProduct(product, baseUrl, imageUrls);
+
+  // --- Meta tags ---
+  setMetaTags(product, imageUrls);
 }
 
-async function setJsonLdProduct(product) {
-  const {
-    name,
-    inStock,
-    description,
-    sku,
-    urlKey,
-    price,
-    priceRange,
-    images,
-    attributes,
-  } = product;
-  const amount = priceRange?.minimum?.final?.amount || price?.final?.amount;
-  const brand = attributes?.find((attr) => attr.name === 'brand');
+function getProductIdFromUrl() {
+  const path = window.location.pathname;
+  // Try /products/{slug}/{id} pattern
+  const match = path.match(/\/products\/[\w-]+\/([\w-]+)(\.html)?$/);
+  if (match) return match[1];
+  // Try /products/{id} pattern
+  const match2 = path.match(/\/products\/([\w-]+)(\.html)?$/);
+  return match2 ? match2[1] : null;
+}
 
-  // get variants
-  const { data } = await pdpApi.fetchGraphQl(`
-    query GET_PRODUCT_VARIANTS($sku: String!) {
-      variants(sku: $sku) {
-        variants {
-          product {
-            sku
-            name
-            inStock
-            images(roles: ["image"]) {
-              url
-            }
-            ...on SimpleProductView {
-              price {
-                final { amount { currency value } }
-              }
-            }
-          }
-        }
-      }
-    }
-  `, {
-    method: 'GET',
-    variables: { sku },
-  });
+function renderGallery(container, imageUrls, altText, mode) {
+  if (!imageUrls || imageUrls.length === 0) {
+    container.innerHTML = '<div class="pdp-carousel"><div class="pdp-carousel__placeholder">No image available</div></div>';
+    return;
+  }
 
-  const variants = data?.variants?.variants || [];
+  const carouselClass = mode === 'thumbnailsColumn'
+    ? 'pdp-carousel pdp-carousel--thumbnailsRow'
+    : 'pdp-carousel';
+
+  let currentIndex = 0;
+
+  const carousel = document.createElement('div');
+  carousel.className = carouselClass;
+
+  // Main image
+  const mainImgContainer = document.createElement('div');
+  mainImgContainer.className = 'pdp-carousel__main';
+  const mainImg = document.createElement('img');
+  mainImg.src = imageUrls[0];
+  mainImg.alt = altText;
+  mainImg.loading = 'eager';
+  mainImg.width = 960;
+  mainImg.height = 1191;
+  mainImgContainer.appendChild(mainImg);
+  carousel.appendChild(mainImgContainer);
+
+  function setActiveImage(index) {
+    currentIndex = index;
+    mainImg.src = imageUrls[index];
+  }
+
+  // Thumbnails (desktop) or dots (mobile)
+  if (mode === 'thumbnailsColumn' && imageUrls.length > 1) {
+    const thumbs = document.createElement('div');
+    thumbs.className = 'pdp-carousel__thumbnails';
+    imageUrls.forEach((url, i) => {
+      const btn = document.createElement('button');
+      btn.className = `pdp-carousel__thumb${i === 0 ? ' pdp-carousel__thumb--active' : ''}`;
+      btn.innerHTML = `<img src="${url}" alt="${altText} thumbnail ${i + 1}" width="80" height="80" loading="lazy" />`;
+      btn.addEventListener('click', () => {
+        setActiveImage(i);
+        thumbs.querySelectorAll('.pdp-carousel__thumb').forEach((t) => t.classList.remove('pdp-carousel__thumb--active'));
+        btn.classList.add('pdp-carousel__thumb--active');
+      });
+      thumbs.appendChild(btn);
+    });
+    carousel.appendChild(thumbs);
+  } else if (mode === 'dots' && imageUrls.length > 1) {
+    const dots = document.createElement('div');
+    dots.className = 'pdp-carousel__dots';
+    imageUrls.forEach((_, i) => {
+      const dot = document.createElement('button');
+      dot.className = `pdp-carousel__dot${i === 0 ? ' pdp-carousel__dot--active' : ''}`;
+      dot.setAttribute('aria-label', `Image ${i + 1}`);
+      dot.addEventListener('click', () => {
+        setActiveImage(i);
+        dots.querySelectorAll('.pdp-carousel__dot').forEach((d) => d.classList.remove('pdp-carousel__dot--active'));
+        dot.classList.add('pdp-carousel__dot--active');
+      });
+      dots.appendChild(dot);
+    });
+    carousel.appendChild(dots);
+  }
+
+  // Arrow buttons
+  if (imageUrls.length > 1) {
+    const prevBtn = document.createElement('button');
+    prevBtn.className = 'pdp-carousel__arrow pdp-carousel__arrow--prev';
+    prevBtn.setAttribute('aria-label', 'Previous image');
+    prevBtn.textContent = '\u2039';
+    prevBtn.addEventListener('click', () => {
+      const newIdx = (currentIndex - 1 + imageUrls.length) % imageUrls.length;
+      setActiveImage(newIdx);
+    });
+
+    const nextBtn = document.createElement('button');
+    nextBtn.className = 'pdp-carousel__arrow pdp-carousel__arrow--next';
+    nextBtn.setAttribute('aria-label', 'Next image');
+    nextBtn.textContent = '\u203A';
+    nextBtn.addEventListener('click', () => {
+      const newIdx = (currentIndex + 1) % imageUrls.length;
+      setActiveImage(newIdx);
+    });
+
+    carousel.appendChild(prevBtn);
+    carousel.appendChild(nextBtn);
+  }
+
+  container.appendChild(carousel);
+}
+
+function showAlert(container, message) {
+  container.innerHTML = `<div class="dropin-in-line-alert dropin-in-line-alert--error">
+    <div class="dropin-in-line-alert__content">${message}</div>
+    <button class="dropin-in-line-alert__close" aria-label="Dismiss">\u00d7</button>
+  </div>`;
+  const closeBtn = container.querySelector('.dropin-in-line-alert__close');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => { container.innerHTML = ''; });
+  }
+  setTimeout(() => { container.innerHTML = ''; }, 5000);
+}
+
+function setJsonLdProduct(product, baseUrl, imageUrls) {
+  const { attributes } = product;
+  const priceData = getProductPrice(product);
+  const name = attributes.name || attributes.names?.default || '';
 
   const ldJson = {
     '@context': 'http://schema.org',
     '@type': 'Product',
     name,
-    description,
-    image: images[0]?.url,
+    description: attributes.description || attributes.shortDescription || '',
+    image: imageUrls[0] || '',
+    sku: attributes.sku || '',
+    productID: attributes.sku || product.id,
+    url: window.location.href,
+    '@id': window.location.href,
     offers: [],
-    productID: sku,
-    brand: {
-      '@type': 'Brand',
-      name: brand?.value,
-    },
-    url: new URL(getProductLink(urlKey, sku), window.location),
-    sku,
-    '@id': new URL(getProductLink(urlKey, sku), window.location),
   };
 
-  if (variants.length > 1) {
-    ldJson.offers.push(...variants.map((variant) => ({
-      '@type': 'Offer',
-      name: variant.product.name,
-      image: variant.product.images[0]?.url,
-      price: variant.product.price.final.amount.value,
-      priceCurrency: variant.product.price.final.amount.currency,
-      availability: variant.product.inStock ? 'http://schema.org/InStock' : 'http://schema.org/OutOfStock',
-      sku: variant.product.sku,
-    })));
-  } else {
+  if (priceData) {
     ldJson.offers.push({
       '@type': 'Offer',
-      price: amount?.value,
-      priceCurrency: amount?.currency,
-      availability: inStock ? 'http://schema.org/InStock' : 'http://schema.org/OutOfStock',
+      price: priceData.price,
+      priceCurrency: priceData.currency,
+      availability: 'http://schema.org/InStock',
     });
   }
 
   setJsonLd(ldJson, 'product');
 }
 
-function createMetaTag(property, content, type) {
-  if (!property || !type) {
-    return;
-  }
-  let meta = document.head.querySelector(`meta[${type}="${property}"]`);
-  if (meta) {
-    if (!content) {
-      meta.remove();
-      return;
+function setMetaTags(product, imageUrls) {
+  const { attributes } = product;
+  const name = attributes.name || attributes.names?.default || '';
+  const priceData = getProductPrice(product);
+
+  document.title = name;
+
+  const setMeta = (attr, attrType, content) => {
+    if (!content) return;
+    let meta = document.head.querySelector(`meta[${attrType}="${attr}"]`);
+    if (meta) {
+      meta.setAttribute('content', content);
+    } else {
+      meta = document.createElement('meta');
+      meta.setAttribute(attrType, attr);
+      meta.setAttribute('content', content);
+      document.head.appendChild(meta);
     }
-    meta.setAttribute(type, property);
-    meta.setAttribute('content', content);
-    return;
-  }
-  if (!content) {
-    return;
-  }
-  meta = document.createElement('meta');
-  meta.setAttribute(type, property);
-  meta.setAttribute('content', content);
-  document.head.appendChild(meta);
-}
-
-function setMetaTags(product) {
-  if (!product) {
-    return;
-  }
-
-  const price = product.prices.final.minimumAmount ?? product.prices.final.amount;
-
-  createMetaTag('title', product.metaTitle || product.name, 'name');
-  createMetaTag('description', product.metaDescription, 'name');
-  createMetaTag('keywords', product.metaKeyword, 'name');
-
-  createMetaTag('og:type', 'product', 'property');
-  createMetaTag('og:description', product.shortDescription, 'property');
-  createMetaTag('og:title', product.metaTitle || product.name, 'property');
-  createMetaTag('og:url', window.location.href, 'property');
-  const mainImage = product?.images?.filter((image) => image.roles.includes('thumbnail'))[0];
-  const metaImage = mainImage?.url || product?.images[0]?.url;
-  createMetaTag('og:image', metaImage, 'property');
-  createMetaTag('og:image:secure_url', metaImage, 'property');
-  createMetaTag('product:price:amount', price.value, 'property');
-  createMetaTag('product:price:currency', price.currency, 'property');
-}
-
-/**
- * Returns the configuration for an image slot.
- * @param ctx - The context of the slot.
- * @returns The configuration for the image slot.
- */
-function imageSlotConfig(ctx) {
-  const { data, defaultImageProps } = ctx;
-  return {
-    alias: data.sku,
-    imageProps: defaultImageProps,
-
-    params: {
-      width: defaultImageProps.width,
-      height: defaultImageProps.height,
-    },
   };
+
+  setMeta('description', 'name', attributes.shortDescription || '');
+  setMeta('og:type', 'property', 'product');
+  setMeta('og:title', 'property', name);
+  setMeta('og:description', 'property', attributes.shortDescription || '');
+  setMeta('og:url', 'property', window.location.href);
+  if (imageUrls[0]) {
+    setMeta('og:image', 'property', imageUrls[0]);
+  }
+  if (priceData) {
+    setMeta('product:price:amount', 'property', String(priceData.price));
+    setMeta('product:price:currency', 'property', priceData.currency);
+  }
 }

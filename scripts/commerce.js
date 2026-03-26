@@ -1,14 +1,50 @@
-import { getCookie } from '@dropins/tools/lib.js';
-import {
-  getHeaders,
-  getConfigValue,
-  getRootPath,
-  initializeConfig,
-  getListOfRootPaths,
-} from '@dropins/tools/lib/aem/configs.js';
-import { events } from '@dropins/tools/event-bus.js';
+import { events } from './oro-events.js';
 import { getMetadata } from './aem.js';
 import initializeDropins from './initializers/index.js';
+
+/**
+ * Config state — replaces @dropins/tools/lib/aem/configs.js
+ */
+let _configData = null;
+let _rootPath = '';
+let _rootPaths = [];
+
+function initializeConfig(config, options) {
+  _configData = config;
+  const publicConfig = config?.public || {};
+  const keys = Object.keys(publicConfig).filter((k) => k !== 'default');
+  keys.forEach((key) => {
+    if (!_rootPath && options.match(key)) {
+      _rootPath = key;
+    }
+  });
+  _rootPaths = keys;
+}
+
+export function getConfigValue(key) {
+  const publicConfig = _configData?.public || {};
+  const matched = publicConfig[_rootPath] || {};
+  const defaults = publicConfig.default || {};
+  const parts = key.split('.');
+  let val = parts.reduce((obj, k) => obj?.[k], matched);
+  if (val === undefined) {
+    val = parts.reduce((obj, k) => obj?.[k], defaults);
+  }
+  return val;
+}
+
+function getRootPath() {
+  return _rootPath || '/';
+}
+
+function getListOfRootPaths() {
+  return _rootPaths;
+}
+
+function getCookie(name) {
+  const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
 
 /**
  * Constants
@@ -87,21 +123,6 @@ export function preloadFile(href, as) {
 }
 
 /**
- * Notifies dropins about the current loading state.
- * @param {string} event The loading state to notify
- */
-function notifyUI(event) {
-  // skip if the event was already sent
-  if (events.lastPayload(`aem/${event}`) === event) return;
-  // notify dropins about the current loading state
-  const handleEmit = () => events.emit(`aem/${event}`);
-  // listen for prerender event
-  document.addEventListener('prerenderingchange', handleEmit, { once: true });
-  // emit the event immediately
-  handleEmit();
-}
-
-/**
  * Detects the page type based on DOM elements
  * @returns {string} The detected page type
  */
@@ -116,47 +137,6 @@ function detectPageType() {
     return 'Checkout';
   }
   return 'CMS';
-}
-
-/**
- * Handles commerce-specific page type initialization
- * @param {string} pageType - The detected page type
- */
-async function handleCommercePageType(pageType) {
-  if (pageType === 'Product') {
-    // initialize pdp
-    await import('./initializers/pdp.js');
-  }
-}
-
-/**
- * Initializes Adobe Data Layer for commerce
- * @param {string} pageType - The detected page type
- */
-function initializeAdobeDataLayer(pageType) {
-  window.adobeDataLayer = window.adobeDataLayer || [];
-
-  window.adobeDataLayer.push(
-    {
-      pageContext: {
-        pageType,
-        pageName: document.title,
-        eventType: 'visibilityHidden',
-        maxXOffset: 0,
-        maxYOffset: 0,
-        minXOffset: 0,
-        minYOffset: 0,
-      },
-    },
-    {
-      shoppingCartContext: {
-        totalQuantity: 0,
-      },
-    },
-  );
-  window.adobeDataLayer.push((dl) => {
-    dl.push({ event: 'page-view', eventInfo: { ...dl.getState() } });
-  });
 }
 
 /**
@@ -209,12 +189,8 @@ export async function fetchIndex(indexFile, pageSize = 500) {
  * Loads commerce-specific eager content
  */
 export async function loadCommerceEager() {
-  const pageType = detectPageType();
-  initializeAdobeDataLayer(pageType);
-  await handleCommercePageType(pageType);
-
-  // notify that the page is ready for eager loading
-  notifyUI('lcp');
+  detectPageType();
+  events.emit('oro/lcp');
 }
 
 /**
@@ -263,19 +239,14 @@ export function decorateLinks(main) {
 export async function loadCommerceLazy() {
   // Initialize modal functionality
   autolinkModals(document);
-
-  // Initialize Adobe Client Data Layer
-  await import('./acdl/adobe-client-data-layer.min.js');
-
-  // Track history
-  trackHistory();
 }
 
 /**
  * Initializes commerce configuration
  */
 export async function initializeCommerce() {
-  initializeConfig(await getConfigFromSession(), {
+  const config = await getConfigFromSession();
+  initializeConfig(config, {
     match: (key) => window.location.pathname.match(`^(/content/.*)?${key}`),
   });
   return initializeDropins();
@@ -348,23 +319,8 @@ export function applyTemplates(doc) {
 /**
  * Fetches and merges placeholder data from multiple sources with intelligent caching.
  *
- * This function retrieves placeholder data from a path-specific file and optional fallback file,
- * then merges them together. It implements request deduplication to prevent multiple simultaneous
- * requests for the same resources and caches results for optimal performance.
- *
  * @param {string} [path] - Optional path to a specific placeholders file to include in the merge.
- *                         If provided, this file's data will be merged with fallback data.
- *                         If not provided, returns all currently cached placeholders.
  * @returns {Promise<Object>} A promise that resolves the merged placeholders object.
- * @example
- * // Get all currently cached placeholders (no fetching)
- * const allPlaceholders = await fetchPlaceholders();
- *
- * // Fetch placeholders with specific path
- * const placeholders = await fetchPlaceholders('placeholders/auth.json');
- *
- * // Get all placeholders including newly fetched ones
- * const updatedPlaceholders = await fetchPlaceholders();
  */
 export async function fetchPlaceholders(path) {
   const rootPath = getRootPath();
@@ -411,7 +367,7 @@ export async function fetchPlaceholders(path) {
         return window.placeholders._pending[resourceCacheKey];
       }
 
-      // Create new fetch promise¨
+      // Create new fetch promise
       // XWALK: no sheet parameter
       const resourceFetchPromise = fetch(`${url}`).then(async (response) => {
         if (response.ok) {
@@ -552,56 +508,6 @@ export async function getConfigFromSession() {
   }
 }
 
-/**
- * Creates a short hash from an object by sorting its entries and hashing them.
- * @param {Object} obj - The object to hash
- * @param {number} [length=5] - Length of the resulting hash
- * @returns {string} A short hash string
- */
-function createHashFromObject(obj, length = 5) {
-  // Sort entries by key and create a string of key-value pairs
-  const objString = Object.entries(obj)
-    .sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
-    .map(([key, value]) => `${key}:${value}`)
-    .join('|');
-
-  // Create a short hash using a simple string manipulation
-  return objString
-    .split('')
-    .reduce((hash, char) => (hash * 31 + char.charCodeAt(0)) % 2147483647, 0)
-    .toString(36)
-    .slice(0, length);
-}
-
-/**
- * Creates a commerce endpoint URL with query parameters including a cache-busting hash.
- * @returns {Promise<URL>} A promise that resolves to the endpoint URL with query parameters
- */
-export async function commerceEndpointWithQueryParams() {
-  const urlWithQueryParams = new URL(getConfigValue('commerce-endpoint'));
-  const headers = getHeaders('cs');
-  const shortHash = createHashFromObject(headers);
-  urlWithQueryParams.searchParams.append('cb', shortHash);
-  return urlWithQueryParams;
-}
-
-/**
- * Extracts the SKU from the current URL path.
- * @returns {string|null} The SKU extracted from the URL, or null if not found
- */
-function getSkuFromUrl() {
-  const path = window.location.pathname;
-  const result = path.match(/\/products\/[\w|-]+\/([\w|-]+)(\.html)?$/);
-  let sku = result?.[1];
-  // Xwalk: If in AEM authoring environment, try to get fallback sku from page metadata
-  // if url does not resolve to a valid sku
-  if (!sku && window.xwalk.previewSku) {
-    sku = window.xwalk.previewSku;
-  }
-
-  return sku;
-}
-
 export function getProductLink(urlKey, sku) {
   return rootLink(`/products/${urlKey}/${sku}`.toLowerCase());
 }
@@ -611,50 +517,15 @@ export function getProductLink(urlKey, sku) {
  * @returns {string|null} The SKU from metadata or URL, or null if not found
  */
 export function getProductSku() {
-  return getMetadata('sku') || getSkuFromUrl();
-}
-
-/**
- * Extracts option UIDs from the URL search parameters.
- * @returns {string[]|undefined} Array of option UIDs, or undefined if not found
- */
-export function getOptionsUIDsFromUrl() {
-  return new URLSearchParams(window.location.search).get('optionsUIDs')?.split(',');
-}
-
-/**
- * Tracks user browsing and purchase history for recommendations.
- * Stores product view history and purchase history in localStorage.
- */
-function trackHistory() {
-  if (!getConsent('commerce-recommendations')) {
-    return;
+  const sku = getMetadata('sku');
+  if (sku) return sku;
+  const path = window.location.pathname;
+  const result = path.match(/\/products\/[\w|-]+\/([\w|-]+)(\.html)?$/);
+  let urlSku = result?.[1];
+  if (!urlSku && window.xwalk?.previewSku) {
+    urlSku = window.xwalk.previewSku;
   }
-  // Store product view history in session storage
-  const storeViewCode = getConfigValue('headers.cs.Magento-Store-View-Code');
-  window.adobeDataLayer.push((dl) => {
-    dl.addEventListener('adobeDataLayer:change', (event) => {
-      if (!event.productContext) {
-        return;
-      }
-      const key = `${storeViewCode}:productViewHistory`;
-      let viewHistory = JSON.parse(window.localStorage.getItem(key) || '[]');
-      viewHistory = viewHistory.filter((item) => item.sku !== event.productContext.sku);
-      viewHistory.push({ date: new Date().toISOString(), sku: event.productContext.sku });
-      window.localStorage.setItem(key, JSON.stringify(viewHistory.slice(-10)));
-    }, { path: 'productContext' });
-    dl.addEventListener('place-order', () => {
-      const shoppingCartContext = dl.getState('shoppingCartContext');
-      if (!shoppingCartContext) {
-        return;
-      }
-      const key = `${storeViewCode}:purchaseHistory`;
-      const purchasedProducts = shoppingCartContext.items.map((item) => item.product.sku);
-      const purchaseHistory = JSON.parse(window.localStorage.getItem(key) || '[]');
-      purchaseHistory.push({ date: new Date().toISOString(), items: purchasedProducts });
-      window.localStorage.setItem(key, JSON.stringify(purchaseHistory.slice(-5)));
-    });
-  });
+  return urlSku;
 }
 
 /**
@@ -691,10 +562,6 @@ export async function loadErrorPage(code = 404) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(htmlText, 'text/html');
   document.body.innerHTML = doc.body.innerHTML;
-  // get dropin styles
-  document.head.querySelectorAll('style[data-dropin]').forEach((style) => {
-    doc.head.appendChild(style);
-  });
   document.head.innerHTML = doc.head.innerHTML;
 
   // https://developers.google.com/search/docs/crawling-indexing/javascript/fix-search-javascript
@@ -729,17 +596,7 @@ export async function loadErrorPage(code = 404) {
  * @returns {boolean} - true if the user is authenticated
  */
 export function checkIsAuthenticated() {
-  return !!getCookie('auth_dropin_user_token') ?? false;
-}
-
-/**
- * Check if consent was given for a specific topic.
- * @param {*} topic Topic identifier
- * @returns {boolean} True if consent was given
- */
-export function getConsent(_topic) {
-  console.warn('getConsent not implemented');
-  return true;
+  return !!getCookie('oro_user_token');
 }
 
 /**

@@ -1,94 +1,38 @@
-// Drop-in Tools
-import { getCookie } from '@dropins/tools/lib.js';
-import { getConfigValue } from '@dropins/tools/lib/aem/configs.js';
-import { events } from '@dropins/tools/event-bus.js';
-import {
-  removeFetchGraphQlHeader,
-  setEndpoint,
-  setFetchGraphQlHeader,
-} from '@dropins/tools/fetch-graphql.js';
-import * as authApi from '@dropins/storefront-auth/api.js';
-import { initializers } from '@dropins/tools/initializer.js';
-import { isAemAssetsEnabled } from '@dropins/tools/lib/aem/assets.js';
-import { fetchPlaceholders } from '../commerce.js';
+import { configure, getGuestToken, getDefaultShoppingList } from '../oro-api.js';
+import { events } from '../oro-events.js';
+import { getConfigValue, fetchPlaceholders } from '../commerce.js';
 
-export const getUserTokenCookie = () => getCookie('auth_dropin_user_token');
-
-// Update auth headers
-const setAuthHeaders = (state) => {
-  if (state) {
-    const token = getUserTokenCookie();
-    setFetchGraphQlHeader('Authorization', `Bearer ${token}`);
-  } else {
-    removeFetchGraphQlHeader('Authorization');
-    authApi.removeFetchGraphQlHeader('Authorization');
-  }
-};
-
-const persistCartDataInSession = (data) => {
-  if (data?.id) {
-    sessionStorage.setItem('DROPINS_CART_ID', data.id);
-  } else {
-    sessionStorage.removeItem('DROPINS_CART_ID');
-  }
-};
-
-const setupAemAssetsImageParams = () => {
-  if (isAemAssetsEnabled()) {
-    // Convert decimal values to integers for AEM Assets compatibility
-    initializers.setImageParamKeys({
-      width: (value) => ['width', Math.floor(value)],
-      height: (value) => ['height', Math.floor(value)],
-      quality: 'quality',
-      auto: 'auto',
-      crop: 'crop',
-      fit: 'fit',
-    });
-  }
+export const getUserTokenCookie = () => {
+  const match = document.cookie.match(/(?:^|;\s*)oro_user_token=([^;]*)/);
+  return match ? decodeURIComponent(match[1]) : null;
 };
 
 export default async function initializeDropins() {
   const init = async () => {
-    // Set auth headers on authenticated event
-    events.on('authenticated', setAuthHeaders);
+    // Configure Oro API client
+    configure({
+      baseUrl: getConfigValue('oro-base-url'),
+      clientId: getConfigValue('oro-client-id'),
+      clientSecret: getConfigValue('oro-client-secret'),
+    });
 
-    // Cache cart data in session storage
-    events.on('cart/data', persistCartDataInSession, { eager: true });
-
-    // on page load, check if user is authenticated
-    const token = getUserTokenCookie();
-    // set auth headers
-    setAuthHeaders(!!token);
-
-    // Event Bus Logger
-    events.enableLogger(true);
-    // Set Fetch Endpoint (Global)
-    setEndpoint(getConfigValue('commerce-core-endpoint') || getConfigValue('commerce-endpoint'));
-
-    // Set up AEM Assets image parameter conversion
-    setupAemAssetsImageParams();
+    // Acquire guest token (or restore session)
+    const hasUserToken = getUserTokenCookie();
+    if (!hasUserToken) {
+      await getGuestToken();
+    }
 
     // Fetch global placeholders
     await fetchPlaceholders('placeholders/global.json');
 
-    // Initialize Global Drop-ins
-    await import('./auth.js');
-    await import('./personalization.js');
-
-    import('./cart.js');
-
-    events.on('aem/lcp', async () => {
-      // Recaptcha
-      await import('@dropins/tools/recaptcha.js').then((recaptcha) => {
-        recaptcha.enableLogger(true);
-        recaptcha.setEndpoint(getConfigValue('commerce-core-endpoint') || getConfigValue('commerce-endpoint'));
-        return recaptcha.setConfig();
-      });
-    });
+    // If authenticated user, preload shopping list for cart badge
+    if (hasUserToken) {
+      getDefaultShoppingList().catch(() => { /* non-critical */ });
+    }
   };
 
   // re-initialize on prerendering changes
-  document.addEventListener('prerenderingchange', initializeDropins, { once: true });
+  document.addEventListener('prerenderingchange', () => init(), { once: true });
 
   return init();
 }
@@ -96,16 +40,13 @@ export default async function initializeDropins() {
 export function initializeDropin(cb) {
   let initialized = false;
 
-  const init = async (force = false) => {
-    // prevent re-initialization
+  const doInit = async (force = false) => {
     if (initialized && !force) return;
-    // initialize drop-in
     await cb();
     initialized = true;
   };
 
-  // re-initialize on prerendering changes
-  document.addEventListener('prerenderingchange', () => init(true), { once: true });
+  document.addEventListener('prerenderingchange', () => doInit(true), { once: true });
 
-  return init;
+  return doInit;
 }
