@@ -1,6 +1,6 @@
 mountpoints:
   /:
-    url: "https://author-p75453-e1796008.adobeaemcloud.com/bin/franklin.delivery/AliaksandrMikhailauDataArt/edsda/main"
+    url: "https://author-p75453-e1796008.adobeaemcloud.com/bin/franklin.delivery/AliaksandrMikhailauDataArt/edsoro/main"
     type: "markup"
     suffix: ".html"
   
