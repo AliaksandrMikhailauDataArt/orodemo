@@ -1,5 +1,5 @@
 /**
- * Intercepts the config.json file and returns a promise that resolves to the config.json file.
+ * Intercepts the /.helix/config.json file and returns a promise that resolves to the config.
  * @type {import('./index.d.ts').CustomCypressCommands['interceptConfig']}
  */
 const interceptConfig = (withConfig) => {
@@ -17,7 +17,7 @@ const interceptConfig = (withConfig) => {
   }
 
   // See: https://docs.cypress.io/api/commands/intercept#cyintercept-and-request-caching
-  cy.intercept('/config.json', { middleware: true, method: 'GET' }, (req) => {
+  cy.intercept('/.helix/config.json', { middleware: true, method: 'GET' }, (req) => {
     req.on('before:response', (res) => {
       // Force all API responses to not be cached
       res.headers['cache-control'] = 'no-store'

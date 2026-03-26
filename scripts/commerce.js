@@ -482,8 +482,6 @@ export async function fetchPlaceholders(path) {
  * @returns {Promise<Object>} - The config JSON from session storage
  */
 export async function getConfigFromSession() {
-  const configURL = new URL(`${window.hlx.codeBasePath}/config.json`, window.location);
-
   try {
     const configJSON = window.sessionStorage.getItem('config');
     if (!configJSON) {
@@ -499,9 +497,19 @@ export async function getConfigFromSession() {
     }
     return parsedConfig;
   } catch (e) {
-    const config = await fetch(configURL);
-    if (!config.ok) throw new Error('Failed to fetch config');
-    const configJSON = await config.json();
+    const resp = await fetch('/.helix/config.json');
+    if (!resp.ok) throw new Error('Failed to fetch config');
+    const config = await resp.json();
+
+    // Convert flat data array ({ key, value }) to nested public.default structure
+    const defaults = {};
+    (config.data || []).forEach((row) => {
+      if (row.key) {
+        defaults[row.key] = row.value;
+      }
+    });
+
+    const configJSON = { public: { default: defaults } };
     configJSON[':expiry'] = Math.round(Date.now() / 1000) + 7200;
     window.sessionStorage.setItem('config', JSON.stringify(configJSON));
     return configJSON;
