@@ -1,12 +1,12 @@
 {
   "mappings": [
-    "/content/edsoro/:/",
-    "/content/edsoro/configuration:/.helix/config.json",
-    "/content/edsoro/headers:/.helix/headers.json",
-    "/content/edsoro/metadata:/metadata.json",
-    "/content/edsoro.resource/enrichment/enrichment.json:/enrichment/enrichment.json"
+    "/content/orodemo/:/",
+    "/content/orodemo/configuration:/.helix/config.json",
+    "/content/orodemo/headers:/.helix/headers.json",
+    "/content/orodemo/metadata:/metadata.json",
+    "/content/orodemo.resource/enrichment/enrichment.json:/enrichment/enrichment.json"
   ],
   "includes": [
-    "/content/edsoro/"
+    "/content/orodemo/"
   ]
 }
