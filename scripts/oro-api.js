@@ -17,6 +17,8 @@ let _refreshToken = null;
 let _tokenExpiry = 0; // epoch seconds
 let _isGuest = true;
 let _refreshPromise = null;
+let _aemCloudMode = false;
+let _mockMode = false;
 
 const SESSION_KEYS = {
   accessToken: 'oro_access_token',
@@ -25,10 +27,21 @@ const SESSION_KEYS = {
   isGuest: 'oro_is_guest',
 };
 
+// --- AEM Cloud detection ---
+
+export function isAemCloud() {
+  return window.location.hostname.includes('adobeaemcloud');
+}
+
+export function isMockMode() {
+  return _mockMode;
+}
+
 // --- Configuration ---
 
 export function configure(config) {
   _config = config;
+  _aemCloudMode = isAemCloud();
   // Restore tokens from sessionStorage
   const stored = sessionStorage.getItem(SESSION_KEYS.accessToken);
   if (stored) {
@@ -80,6 +93,10 @@ function clearTokens() {
 
 function redirectToLogin() {
   clearTokens();
+  if (_aemCloudMode) {
+    _mockMode = true;
+    return;
+  }
   if (window.location.pathname !== '/') {
     window.location.href = '/';
   }
@@ -106,6 +123,18 @@ export async function login(email, password) {
     await getDefaultShoppingList(); // eslint-disable-line no-use-before-define
   } catch (_) { /* non-critical */ }
 
+  return data;
+}
+
+export async function guestToken() {
+  const resp = await fetch(`${_config.baseUrl}/guest-token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!resp.ok) throw new Error('Guest token request failed');
+  const data = await resp.json();
+  storeTokens(data, true);
+  events.emit('oro/authenticated', { isGuest: true, token: _accessToken });
   return data;
 }
 
@@ -136,6 +165,7 @@ async function refreshAccessToken() {
 }
 
 async function ensureToken() {
+  if (_mockMode) return;
   const now = Math.floor(Date.now() / 1000);
   if (_accessToken && _tokenExpiry - now > 60) return;
 
@@ -147,6 +177,22 @@ async function ensureToken() {
   await _refreshPromise;
 }
 
+// --- Mock response for AEM Cloud fallback ---
+
+function createMockResponse() {
+  return new Response(JSON.stringify({ data: [], included: [] }), {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/vnd.api+json',
+      'X-Include-Total-Count': '0',
+    },
+  });
+}
+
+export function enableMockMode() {
+  _mockMode = true;
+}
+
 // --- Core fetch wrapper ---
 
 const JSON_API_HEADERS = {
@@ -156,7 +202,10 @@ const JSON_API_HEADERS = {
 };
 
 async function oroFetch(path, options = {}) {
+  if (_mockMode) return createMockResponse();
+
   await ensureToken();
+  if (_mockMode) return createMockResponse();
 
   const url = `${_config.baseUrl}${path}`;
   const headers = {
@@ -165,20 +214,34 @@ async function oroFetch(path, options = {}) {
     ...(options.headers || {}),
   };
 
-  const resp = await fetch(url, { ...options, headers });
+  try {
+    const resp = await fetch(url, { ...options, headers });
 
-  // On 401, try refresh and retry once
-  if (resp.status === 401) {
-    await refreshAccessToken();
-    const retryHeaders = {
-      ...JSON_API_HEADERS,
-      Authorization: `Bearer ${_accessToken}`,
-      ...(options.headers || {}),
-    };
-    return fetch(url, { ...options, headers: retryHeaders });
+    // On 401, try refresh and retry once
+    if (resp.status === 401) {
+      await refreshAccessToken();
+      if (_mockMode) return createMockResponse();
+      const retryHeaders = {
+        ...JSON_API_HEADERS,
+        Authorization: `Bearer ${_accessToken}`,
+        ...(options.headers || {}),
+      };
+      return fetch(url, { ...options, headers: retryHeaders });
+    }
+
+    if (!resp.ok && _aemCloudMode) {
+      _mockMode = true;
+      return createMockResponse();
+    }
+
+    return resp;
+  } catch (e) {
+    if (_aemCloudMode) {
+      _mockMode = true;
+      return createMockResponse();
+    }
+    throw e;
   }
-
-  return resp;
 }
 
 async function oroGet(path) {
@@ -252,6 +315,25 @@ export async function listProducts({
 }
 
 export async function getProduct(productId) {
+  if (_mockMode) {
+    return {
+      id: '',
+      type: 'products',
+      attributes: {
+        name: '',
+        names: { default: '' },
+        sku: '',
+        shortDescription: '',
+        description: '',
+        prices: [],
+        lowPrice: null,
+        featured: false,
+        unitPrecisions: [],
+      },
+      relationships: {},
+      _resolved: { images: [], category: null },
+    };
+  }
   const fields = 'name,names,sku,shortDescription,description,prices,lowPrice,featured,images,category,unitPrecisions';
   const resp = await oroGet(
     `/api/products/${productId}?include=images,category&fields[products]=${encodeURIComponent(fields)}`,

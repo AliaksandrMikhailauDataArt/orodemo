@@ -1,4 +1,6 @@
-import { configure, getDefaultShoppingList } from '../oro-api.js';
+import {
+  configure, getDefaultShoppingList, isAemCloud, guestToken, enableMockMode,
+} from '../oro-api.js';
 import { fetchPlaceholders } from '../commerce.js';
 
 export const getUserTokenCookie = () => {
@@ -13,9 +15,18 @@ export default async function initializeDropins() {
       baseUrl: 'http://localhost:3001',
     });
 
-    // No guest token — redirect unauthenticated users to login (index page)
     const hasUserToken = getUserTokenCookie();
-    if (!hasUserToken && window.location.pathname !== '/') {
+    const aemCloud = isAemCloud();
+
+    if (aemCloud && !hasUserToken) {
+      // On AEM Cloud without user token: try guest token, fall back to mock mode
+      try {
+        await guestToken();
+      } catch (_) {
+        enableMockMode();
+      }
+    } else if (!hasUserToken && window.location.pathname !== '/') {
+      // Standard flow: redirect unauthenticated users to login (index page)
       window.location.href = '/';
       return;
     }
@@ -24,7 +35,7 @@ export default async function initializeDropins() {
     await fetchPlaceholders('placeholders/global.json');
 
     // If authenticated user, preload shopping list for cart badge
-    if (hasUserToken) {
+    if (hasUserToken || aemCloud) {
       getDefaultShoppingList().catch(() => { /* non-critical */ });
     }
   };
