@@ -12,6 +12,6 @@ helix-importer-ui
 scripts/__dropins__/**/*.map
 .env
 CLAUDE.md
-PROXY-API.md
 oro-api-integration.md
 oro-proxy
+.claude
