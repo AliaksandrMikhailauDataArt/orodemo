@@ -24,6 +24,7 @@
 
 .checkout-header h1 {
     margin: 0;
+    color: var(--color-brand-500);
 }
 
 /* Block dividers */
@@ -170,7 +171,7 @@
 .cart-summary-list__heading-text {
     font: var(--type-headline-2-strong-font);
     letter-spacing: var(--type-headline-2-strong-letter-spacing);
-    color: var(--color-neutral-800);
+    color: var(--color-brand-500);
 }
 
 .cart-cart-summary-list__heading {
@@ -181,7 +182,7 @@
 .cart-cart-summary-list__heading-text {
     font: var(--type-headline-2-strong-font);
     letter-spacing: var(--type-headline-2-strong-letter-spacing);
-    color: var(--color-neutral-800);
+    color: var(--color-brand-500);
 }
 
 .cart-summary-list__edit {
@@ -220,8 +221,36 @@
 .checkout__billing-form .dropin-header-container__title {
     font: var(--type-headline-2-default-font);
     letter-spacing: var(--type-headline-2-default-letter-spacing);
-    color: var(--color-neutral-800);
+    color: var(--color-brand-500);
     margin: 0 0 var(--spacing-medium) 0;
+}
+
+/* Form inputs — underline style */
+.checkout__shipping-form input,
+.checkout__billing-form input,
+.checkout__shipping-form select,
+.checkout__billing-form select {
+    border: none;
+    border-bottom: 2px solid var(--color-neutral-400);
+    border-radius: 0;
+    background: transparent;
+    padding: var(--spacing-xsmall) 0;
+}
+
+.checkout__shipping-form input:focus,
+.checkout__billing-form input:focus,
+.checkout__shipping-form select:focus,
+.checkout__billing-form select:focus {
+    border-bottom-color: var(--color-brand-500);
+    outline: none;
+}
+
+/* Place order CTA */
+.checkout__place-order-btn {
+    width: 100%;
+    border-radius: var(--shape-border-radius-3);
+    text-transform: uppercase;
+    font-weight: 700;
 }
 
 .checkout__shipping-form .dropin-header-container .dropin-divider,

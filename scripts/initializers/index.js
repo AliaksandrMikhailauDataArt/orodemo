@@ -1,6 +1,5 @@
-import { configure, getGuestToken, getDefaultShoppingList } from '../oro-api.js';
-import { events } from '../oro-events.js';
-import { getConfigValue, fetchPlaceholders } from '../commerce.js';
+import { configure, getDefaultShoppingList } from '../oro-api.js';
+import { fetchPlaceholders } from '../commerce.js';
 
 export const getUserTokenCookie = () => {
   const match = document.cookie.match(/(?:^|;\s*)oro_user_token=([^;]*)/);
@@ -9,17 +8,16 @@ export const getUserTokenCookie = () => {
 
 export default async function initializeDropins() {
   const init = async () => {
-    // Configure Oro API client
+    // Configure Oro API client — on localhost, route through the proxy server
     configure({
-      baseUrl: getConfigValue('oro-base-url'),
-      clientId: getConfigValue('oro-client-id'),
-      clientSecret: getConfigValue('oro-client-secret'),
+      baseUrl: 'http://localhost:3001',
     });
 
-    // Acquire guest token (or restore session)
+    // No guest token — redirect unauthenticated users to login (index page)
     const hasUserToken = getUserTokenCookie();
-    if (!hasUserToken) {
-      await getGuestToken();
+    if (!hasUserToken && window.location.pathname !== '/') {
+      window.location.href = '/';
+      return;
     }
 
     // Fetch global placeholders

@@ -1,5 +1,5 @@
 .accordion details {
-    border: 1px solid #dadada;
+    border: 1px solid var(--color-neutral-300);
 }
 
 /* stylelint-disable-next-line no-descending-specificity */
@@ -19,15 +19,16 @@
     list-style: none;
     overflow: auto;
     transition: background-color 0.2s;
+    color: var(--color-brand-500);
 }
 
 .accordion details[open] summary {
-    background-color: var(--light-color);
+    background-color: var(--color-neutral-100);
 }
 
 .accordion details summary:focus,
 .accordion details summary:hover {
-    background-color: var(--light-color);
+    background-color: var(--color-neutral-100);
 }
 
 .accordion details summary::-webkit-details-marker {
@@ -56,6 +57,6 @@
 }
 
 .accordion details[open] .accordion-item-body {
-    border-top: 1px solid #dadada;
+    border-top: 1px solid var(--color-neutral-300);
     background-color: var(--background-color);
 }

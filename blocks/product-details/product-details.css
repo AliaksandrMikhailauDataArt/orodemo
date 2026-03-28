@@ -25,10 +25,14 @@
 
 .product-details__header {
   margin-bottom: var(--spacing-medium);
+  color: var(--color-brand-500);
 }
 
 .product-details__price {
   margin-top: var(--spacing-medium);
+  font-size: 3.2rem;
+  font-weight: 700;
+  color: var(--color-brand-500);
 }
 
 .product-details__gallery .pdp-carousel {
@@ -61,6 +65,14 @@
   grid-template-columns: 1fr auto;
   gap: var(--grid-1-gutters);
   grid-auto-rows: max-content;
+}
+
+.product-details__buttons .dropin-button--primary,
+.product-details__buttons button.button {
+  border-radius: var(--shape-border-radius-3);
+  text-transform: uppercase;
+  font-weight: 700;
+  padding: 12px 32px;
 }
 
 .product-details__buttons > div {

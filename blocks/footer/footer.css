@@ -1,7 +1,23 @@
 footer {
-    background-color: var(--color-neutral-100);
+    background-color: var(--color-brand-700);
+    color: var(--color-neutral-50);
     font: var(--type-body-2-default-font);
     letter-spacing: var(--type-body-2-default-letter-spacing);
+}
+
+footer a:any-link {
+    color: rgb(255 255 255 / 85%);
+}
+
+footer a:hover {
+    color: var(--color-neutral-50);
+}
+
+footer h2,
+footer h3,
+footer h4 {
+    color: var(--color-neutral-50);
+    font-weight: 700;
 }
 
 footer .footer > div {

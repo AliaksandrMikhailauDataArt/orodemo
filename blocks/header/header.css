@@ -8,11 +8,12 @@
 
 /* header and nav layout */
 header .nav-wrapper {
-  background-color: var(--background-color);
+  background-color: var(--color-neutral-50);
   width: 100%;
   z-index: 3;
   position: fixed;
   border-bottom: 1px solid var(--color-neutral-300);
+  box-shadow: var(--shape-shadow-3);
 }
 
 header nav {
@@ -312,7 +313,7 @@ header nav .nav-tools-panel {
   z-index: 100;
   position: absolute;
   box-shadow: var(--shape-shadow-2);
-  background: var(--background-color);
+  background: var(--color-neutral-50);
   top: var(--nav-height);
   right: 0;
   width: 100%;
@@ -330,7 +331,7 @@ header nav .nav-tools {
   height: 100%;
   gap: var(--spacing-small);
   align-items: center;
-  background: var(--background-color);
+  background: var(--color-neutral-50);
   z-index: 3;
 }
 
@@ -477,7 +478,7 @@ header .nav-search-input .search_autocomplete .popover-container {
 }
 
 #auth-combine-wrapper {
-  background-color: white;
+  background-color: var(--color-neutral-50);
   border-radius: var(--shape-border-radius-2);
   width: 100%;
   max-width: 800px;
@@ -547,7 +548,7 @@ header .nav-search-input .search_autocomplete .popover-container {
 .authenticated-user-menu
 li
 > .logoutButton:hover {
-  background-color: lightgray;
+  background-color: var(--color-neutral-200);
 }
 
 .dropdown-wrapper.nav-tools-wrapper .nav-auth-menu-panel .authenticated-user-menu li button {
@@ -568,7 +569,7 @@ li
 }
 
 .dropdown-wrapper.nav-tools-wrapper .nav-auth-menu-panel .authenticated-user-menu li button:hover {
-  background-color: lightgray !important;
+  background-color: var(--color-neutral-200) !important;
   border-radius: 0 !important;
 }
 
@@ -756,8 +757,8 @@ li
 }
 
 .product-discovery--search-bar-results__outer-container .product-discovery--search-bar-results__grid {
-  box-shadow: 2px 2px 2px lightgray;
-  border: 1px solid lightgray;
+  box-shadow: var(--shape-shadow-3);
+  border: 1px solid var(--color-neutral-300);
 }
 
 .product-discovery--product-item {

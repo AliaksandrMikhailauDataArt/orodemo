@@ -11,7 +11,7 @@ import {
 } from './oro-utils.js';
 
 // --- Module state ---
-let _config = null; // { baseUrl, clientId, clientSecret }
+let _config = null; // { baseUrl }
 let _accessToken = null;
 let _refreshToken = null;
 let _tokenExpiry = 0; // epoch seconds
@@ -76,13 +76,20 @@ function clearTokens() {
   document.cookie = 'oro_user_token=; path=/; max-age=0';
 }
 
-// --- Token requests ---
+// --- Auth helpers ---
 
-async function requestToken(body) {
-  const resp = await fetch(`${_config.baseUrl}/oauth2-token`, {
+function redirectToLogin() {
+  clearTokens();
+  if (window.location.pathname !== '/') {
+    window.location.href = '/';
+  }
+}
+
+export async function login(email, password) {
+  const resp = await fetch(`${_config.baseUrl}/login`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams(body).toString(),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: email, password }),
   });
 
   if (!resp.ok) {
@@ -90,30 +97,7 @@ async function requestToken(body) {
     throw new Error(err.error_description || err.message || 'Authentication failed');
   }
 
-  return resp.json();
-}
-
-export async function getGuestToken() {
-  const data = await requestToken({
-    grant_type: 'password',
-    client_id: _config.clientId,
-    client_secret: _config.clientSecret,
-    username: 'guest',
-    password: 'guest',
-  });
-  storeTokens(data, true);
-  events.emit('oro/authenticated', { isGuest: true, token: _accessToken });
-  return data;
-}
-
-export async function login(email, password) {
-  const data = await requestToken({
-    grant_type: 'password',
-    client_id: _config.clientId,
-    client_secret: _config.clientSecret,
-    username: email,
-    password,
-  });
+  const data = await resp.json();
   storeTokens(data, false);
   events.emit('oro/authenticated', { isGuest: false, token: _accessToken });
 
@@ -125,30 +109,29 @@ export async function login(email, password) {
   return data;
 }
 
-export async function logout() {
+export function logout() {
   clearTokens();
   events.emit('oro/authenticated', null);
-  await getGuestToken();
+  window.location.href = '/';
 }
 
 async function refreshAccessToken() {
   if (!_refreshToken) {
-    await getGuestToken();
+    redirectToLogin();
     return;
   }
   try {
-    const data = await requestToken({
-      grant_type: 'refresh_token',
-      client_id: _config.clientId,
-      client_secret: _config.clientSecret,
-      refresh_token: _refreshToken,
+    const resp = await fetch(`${_config.baseUrl}/refresh-token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: _refreshToken }),
     });
-    storeTokens(data, _isGuest);
-    events.emit('oro/authenticated', { isGuest: _isGuest, token: _accessToken });
+    if (!resp.ok) throw new Error('Token refresh failed');
+    const data = await resp.json();
+    storeTokens(data, false);
+    events.emit('oro/authenticated', { isGuest: false, token: _accessToken });
   } catch (_) {
-    // Refresh failed — fall back to guest
-    clearTokens();
-    await getGuestToken();
+    redirectToLogin();
   }
 }
 

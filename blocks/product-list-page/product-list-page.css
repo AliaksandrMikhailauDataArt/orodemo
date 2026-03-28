@@ -97,6 +97,30 @@
     display: none;
 }
 
+/* Product card styling */
+.block.product-list-page .search__product-card {
+    background-color: var(--color-neutral-50);
+    border-radius: var(--shape-border-radius-1);
+    box-shadow: var(--shape-shadow-1);
+    overflow: hidden;
+}
+
+.block.product-list-page .search__product-card h3,
+.block.product-list-page .search__product-card a {
+    color: var(--color-brand-500);
+}
+
+.block.product-list-page .search__product-price {
+    color: var(--color-brand-500);
+    font-weight: 700;
+    font-size: 1.8rem;
+}
+
+.block.product-list-page .search__sort-select {
+    border-radius: var(--shape-border-radius-1);
+    border-color: var(--color-neutral-300);
+}
+
 /* Media Queries */
 @media only screen and (min-width: 768px) {
     .block.product-list-page .search__wrapper {

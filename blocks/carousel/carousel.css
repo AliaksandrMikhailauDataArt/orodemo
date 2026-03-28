@@ -115,7 +115,7 @@ main > .section .carousel-wrapper {
 .carousel .carousel-slide-indicator button:disabled,
 .carousel .carousel-slide-indicator button:hover,
 .carousel .carousel-slide-indicator button:focus-visible {
-    background-color: var(--color-neutral-700);
+    background-color: var(--color-brand-500);
 }
 
 .carousel .carousel-navigation-buttons {

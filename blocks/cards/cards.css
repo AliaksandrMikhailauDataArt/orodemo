@@ -12,12 +12,14 @@
 }
 
 .cards > ul > li {
-  border: var(--shape-border-width-1) solid var(--color-neutral-500);
-  background-color: var(--background-color);
+  background-color: var(--color-neutral-50);
+  border-radius: var(--shape-border-radius-1);
+  box-shadow: var(--shape-shadow-1);
+  overflow: hidden;
 }
 
 .cards .cards-card-body {
-  margin: var(--spacing-small);
+  padding: var(--spacing-small) var(--spacing-medium);
 }
 
 .cards .cards-card-image {
