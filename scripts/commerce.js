@@ -504,8 +504,10 @@ export async function getConfigFromSession() {
     // Convert flat data array ({ key, value }) to nested public.default structure
     const defaults = {};
     (config.data || []).forEach((row) => {
-      if (row.key) {
-        defaults[row.key] = row.value;
+      const key = row.Key || row.key;
+      const value = row.Value ?? row.value;
+      if (key) {
+        defaults[key] = value;
       }
     });
 
