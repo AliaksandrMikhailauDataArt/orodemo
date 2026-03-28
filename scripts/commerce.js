@@ -497,7 +497,7 @@ export async function getConfigFromSession() {
     }
     return parsedConfig;
   } catch (e) {
-    const resp = await fetch('/.helix/config.json');
+    const resp = await fetch('config.json');
     if (!resp.ok) throw new Error('Failed to fetch config');
     const config = await resp.json();
 
