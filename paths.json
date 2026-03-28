@@ -4,6 +4,7 @@
     "/content/orodemo/configuration:/.helix/config.json",
     "/content/orodemo/headers:/.helix/headers.json",
     "/content/orodemo/metadata:/metadata.json",
+    "/content/dam/orodemo/config.json:/siteconfig.json",
     "/content/orodemo.resource/enrichment/enrichment.json:/enrichment/enrichment.json"
   ],
   "includes": [
