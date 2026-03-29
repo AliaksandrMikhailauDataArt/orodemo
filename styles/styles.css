@@ -12,11 +12,11 @@
 
 /* stylelint-disable no-empty-source */
 :root, .dropin-design {
-  /* Carnival Cruise Line design tokens */
+  /* P&O Cruises design tokens */
   --color-brand-300: #4A7FB8;
-  --color-brand-500: #10559A;
-  --color-brand-600: #0D4680;
-  --color-brand-700: #0A3766;
+  --color-brand-500: #0071F2;
+  --color-brand-600: #173A87;
+  --color-brand-700: #173A87;
   --color-neutral-50: #fff;
   --color-neutral-100: #F1F4F9;
   --color-neutral-200: #E8ECF3;

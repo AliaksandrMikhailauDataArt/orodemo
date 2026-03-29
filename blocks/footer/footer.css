@@ -1,35 +1,53 @@
+/* ===================================================================
+   P&O Cruises — Footer Styles (Desktop-focused)
+   Source: designs/header-footer.md
+   =================================================================== */
+
 footer {
-    background-color: var(--color-brand-700);
-    color: var(--color-neutral-50);
-    font: var(--type-body-2-default-font);
-    letter-spacing: var(--type-body-2-default-letter-spacing);
+    background-color: var(--po-navy, #173a87);
+    color: var(--po-white, #fff);
+    font-size: 1rem;
+    font-weight: 500;
+    line-height: 1.62;
+    letter-spacing: -0.28px;
 }
 
 footer a:any-link {
-    color: rgb(255 255 255 / 85%);
+    color: var(--po-white, #fff);
+    text-decoration: none;
+    transition: color 0.2s;
 }
 
 footer a:hover {
-    color: var(--color-neutral-50);
+    color: var(--po-white, #fff);
+    text-decoration: underline;
+    text-underline-offset: 4px;
 }
 
 footer h2,
 footer h3,
 footer h4 {
-    color: var(--color-neutral-50);
-    font-weight: 700;
+    color: rgb(178 227 255);
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.57;
+    letter-spacing: -0.36px;
+    margin: 0 0 24px;
 }
 
 footer .footer > div {
     margin: auto;
-    max-width: 1200px;
-    padding: 40px 24px 24px;
+    max-width: 1648px;
+    padding: 48px 16px;
 }
 
 footer .footer p {
     margin: 0;
 }
 
+/* ===================================================================
+   Storeview Switcher (must precede footer .footer ul for specificity)
+   =================================================================== */
 .storeview-switcher-button {
     background: transparent;
     padding-left: 0;
@@ -82,8 +100,113 @@ footer .footer p {
     margin-bottom: var(--spacing-small);
 }
 
+/* ===================================================================
+   Footer Content Styles
+   =================================================================== */
+/* stylelint-disable no-descending-specificity -- storeview modal is a separate DOM tree */
+footer .footer ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+footer .footer ul li a,
+footer .footer ul li button {
+    display: block;
+    padding: 12px 0;
+    font-size: 1rem;
+    font-weight: 500;
+    line-height: 1.62;
+    letter-spacing: -0.28px;
+    color: var(--po-white, #fff);
+    text-decoration: none;
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: start;
+    font-family: inherit;
+    transition: color 0.2s;
+}
+
+footer .footer ul li a:hover,
+footer .footer ul li button:hover {
+    color: var(--po-white, #fff);
+    text-decoration: underline;
+    text-underline-offset: 4px;
+}
+/* stylelint-enable no-descending-specificity */
+
+/* ===================================================================
+   Desktop (≥ 900px)
+   =================================================================== */
 @media (min-width: 900px) {
     footer .footer > div {
-        padding: 40px 32px 24px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 48px;
+        padding: 48px 40px;
+    }
+
+    footer .footer > div > div {
+        flex: 1 1 200px;
+        min-width: 200px;
+    }
+
+    /* Sections from the CMS fragment lay out as flex columns */
+    footer .footer > div > .default-content-wrapper {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 48px;
+    }
+
+    /* Each top-level element in the content wrapper becomes a column */
+    footer .footer > div > .default-content-wrapper > div,
+    footer .footer > div > .default-content-wrapper > nav,
+    footer .footer > div > .default-content-wrapper > section {
+        flex: 1 1 200px;
+        min-width: 200px;
+        padding-right: 1rem;
+    }
+
+    /* Last section (bottom bar) — full width with top border */
+    footer .footer > div > div:last-child {
+        flex-basis: 100%;
+        border-top: 1px solid rgb(178 227 255 / 20%);
+        padding-top: 24px;
+        padding-bottom: 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 92px;
+    }
+
+    /* Bottom bar links */
+    footer .footer > div > div:last-child a {
+        color: #dfe4ef;
+        font-size: 0.875rem;
+        font-weight: 500;
+        line-height: 1.57;
+        letter-spacing: -0.36px;
+        text-decoration: none;
+    }
+
+    footer .footer > div > div:last-child ul {
+        flex-flow: row wrap;
+        gap: 24px;
+    }
+
+    footer .footer > div > div:last-child ul li a,
+    footer .footer > div > div:last-child ul li button {
+        padding: 0;
+        font-size: 0.875rem;
+        color: #dfe4ef;
+    }
+
+    footer .footer > div > div:last-child a:hover {
+        color: var(--po-gold, #988642);
+        text-decoration: underline;
     }
 }
