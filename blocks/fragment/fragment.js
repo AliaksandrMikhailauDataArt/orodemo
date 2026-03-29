@@ -4,7 +4,7 @@
  * https://www.aem.live/developer/block-collection/fragment
  */
 
-import { getRootPath } from '@dropins/tools/lib/aem/configs.js';
+import { getRootPath } from '../../scripts/commerce.js';
 import { decorateMain } from '../../scripts/scripts.js';
 import {
   loadSections,

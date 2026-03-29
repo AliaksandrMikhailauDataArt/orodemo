@@ -1,4 +1,3 @@
-import { Render } from '@dropins/tools/lib.js';
 import { loadCSS, buildBlock } from '../../scripts/aem.js';
 
 export default async function createModal(contentNodes) {
@@ -24,8 +23,8 @@ export default async function createModal(contentNodes) {
   const closeModal = () => {
     // close the dialog
     dialog.close();
-    // unmount any dropin containers rendered in the modal
-    dialog.querySelectorAll('[data-dropin-container]').forEach(Render.unmount);
+    // remove any dropin containers rendered in the modal
+    dialog.querySelectorAll('[data-dropin-container]').forEach((el) => el.remove());
   };
 
   // close dialog on clicks outside the dialog. https://stackoverflow.com/a/70593278/79461
