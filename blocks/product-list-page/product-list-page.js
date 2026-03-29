@@ -2,7 +2,6 @@ import {
   listProducts, addToShoppingList, isGuest, getCategoryTree,
 } from '../../scripts/oro-api.js';
 import {
-  formatPrice,
   getProductImageUrl,
   getProductPrice,
 } from '../../scripts/oro-utils.js';
@@ -30,19 +29,29 @@ function createFilterOption(groupName, value, label, checked) {
   return lbl;
 }
 
+function updateAccordionLabel(accordion, label) {
+  const valSpan = accordion.querySelector('.filter-panel__accordion-value');
+  if (valSpan) valSpan.textContent = ` : ${label}`;
+}
+
 function createFilterAccordion(title, contentEl, selectedLabel = '') {
   const details = document.createElement('details');
   details.className = 'filter-panel__accordion';
 
   const summary = document.createElement('summary');
   summary.className = 'filter-panel__accordion-summary';
-  const titleSpan = document.createElement('span');
-  titleSpan.className = 'filter-panel__accordion-title';
-  titleSpan.textContent = selectedLabel ? `${title} : ${selectedLabel}` : title;
-  titleSpan.dataset.baseTitle = title;
+  const titleWrap = document.createElement('span');
+  titleWrap.className = 'filter-panel__accordion-title';
+  const boldSpan = document.createElement('span');
+  boldSpan.className = 'filter-panel__accordion-name';
+  boldSpan.textContent = title;
+  const valSpan = document.createElement('span');
+  valSpan.className = 'filter-panel__accordion-value';
+  valSpan.textContent = selectedLabel ? ` : ${selectedLabel}` : '';
+  titleWrap.append(boldSpan, valSpan);
   const chevron = document.createElement('span');
   chevron.className = 'filter-panel__chevron';
-  summary.append(titleSpan, chevron);
+  summary.append(titleWrap, chevron);
 
   const body = document.createElement('div');
   body.className = 'filter-panel__accordion-body';
@@ -151,8 +160,7 @@ export default async function decorate(block) {
   sortOptions.addEventListener('change', (e) => {
     currentSort = e.target.value;
     const label = sortItems.find((s) => s.value === currentSort)?.label || 'Recommended';
-    const titleSpan = sortAccordion.querySelector('.filter-panel__accordion-title');
-    titleSpan.textContent = `${titleSpan.dataset.baseTitle} : ${label}`;
+    updateAccordionLabel(sortAccordion, label);
     currentPage = 1;
     loadAndRender(); // eslint-disable-line no-use-before-define
   });
@@ -184,8 +192,7 @@ export default async function decorate(block) {
   categoryOptions.addEventListener('change', (e) => {
     currentCategory = e.target.value;
     const label = categoryMap.get(currentCategory) || 'All';
-    const titleSpan = categoryAccordion.querySelector('.filter-panel__accordion-title');
-    titleSpan.textContent = `${titleSpan.dataset.baseTitle} : ${label}`;
+    updateAccordionLabel(categoryAccordion, label);
     currentPage = 1;
     loadAndRender(); // eslint-disable-line no-use-before-define
   });
@@ -207,12 +214,9 @@ export default async function decorate(block) {
     categoryOptions.querySelector('input[value=""]').checked = true;
     shipOptions.querySelector('input[value=""]').checked = true;
     // Reset accordion titles
-    const sortTitle = sortAccordion.querySelector('.filter-panel__accordion-title');
-    sortTitle.textContent = `${sortTitle.dataset.baseTitle} : Recommended`;
-    const catTitle = categoryAccordion.querySelector('.filter-panel__accordion-title');
-    catTitle.textContent = `${catTitle.dataset.baseTitle} : All`;
-    const shipTitle = shipAccordion.querySelector('.filter-panel__accordion-title');
-    shipTitle.textContent = `${shipTitle.dataset.baseTitle} : All`;
+    updateAccordionLabel(sortAccordion, 'Recommended');
+    updateAccordionLabel(categoryAccordion, 'All');
+    updateAccordionLabel(shipAccordion, 'All');
     loadAndRender(); // eslint-disable-line no-use-before-define
   });
 
@@ -320,7 +324,15 @@ export default async function decorate(block) {
 
       const priceSpan = document.createElement('span');
       priceSpan.className = 'deal-card__price';
-      priceSpan.textContent = priceData ? formatPrice(priceData.price, priceData.currency) : '';
+      if (priceData) {
+        const rounded = Math.round(priceData.price);
+        priceSpan.textContent = new Intl.NumberFormat('en-US', {
+          style: 'currency',
+          currency: priceData.currency || 'USD',
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 0,
+        }).format(rounded);
+      }
 
       const shopBtn = document.createElement('button');
       shopBtn.className = 'deal-card__shop-btn';
