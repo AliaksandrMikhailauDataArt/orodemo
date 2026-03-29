@@ -1,5 +1,6 @@
-import { listProducts, addToShoppingList, isGuest } from '../../scripts/oro-api.js';
-import { events } from '../../scripts/oro-events.js';
+import {
+  listProducts, addToShoppingList, isGuest, getCategoryTree,
+} from '../../scripts/oro-api.js';
 import {
   formatPrice,
   getProductImageUrl,
@@ -13,26 +14,79 @@ import {
   CUSTOMER_LOGIN_PATH,
 } from '../../scripts/commerce.js';
 
+function createFilterOption(groupName, value, label, checked) {
+  const lbl = document.createElement('label');
+  lbl.className = `filter-panel__option${checked ? ' filter-panel__option--selected' : ''}`;
+  const input = document.createElement('input');
+  input.type = 'radio';
+  input.name = groupName;
+  input.value = value;
+  input.checked = checked;
+  const span = document.createElement('span');
+  span.textContent = label;
+  lbl.append(input, span);
+  return lbl;
+}
+
+function createFilterAccordion(title, contentEl, openByDefault = false) {
+  const details = document.createElement('details');
+  details.className = 'filter-panel__accordion';
+  if (openByDefault) details.open = true;
+
+  const summary = document.createElement('summary');
+  summary.className = 'filter-panel__accordion-summary';
+  const titleSpan = document.createElement('span');
+  titleSpan.textContent = title;
+  const chevron = document.createElement('span');
+  chevron.className = 'filter-panel__chevron';
+  summary.append(titleSpan, chevron);
+
+  const body = document.createElement('div');
+  body.className = 'filter-panel__accordion-body';
+  body.appendChild(contentEl);
+
+  details.append(summary, body);
+  return details;
+}
+
+function setupViewDetailsToggle(card) {
+  const descText = card.querySelector('.deal-card__description-text');
+  const toggleBtn = card.querySelector('.deal-card__view-details');
+  if (!toggleBtn) return;
+  if (!descText || !descText.textContent.trim()) {
+    toggleBtn.style.display = 'none';
+    return;
+  }
+  requestAnimationFrame(() => {
+    if (descText.scrollHeight <= descText.clientHeight) {
+      toggleBtn.style.display = 'none';
+      return;
+    }
+    toggleBtn.addEventListener('click', () => {
+      const expanded = descText.classList.toggle('deal-card__description-text--expanded');
+      toggleBtn.textContent = expanded ? 'Hide Details' : 'View Details';
+      toggleBtn.setAttribute('aria-expanded', String(expanded));
+    });
+  });
+}
+
 export default async function decorate(block) {
   const labels = await fetchPlaceholders();
   const config = readBlockConfig(block);
 
-  // Build DOM skeleton (same structure as original)
   const fragment = document.createRange().createContextualFragment(`
     <div class="search__wrapper">
-      <div class="search__result-info"></div>
+      <div class="search__result-bar"></div>
       <div class="search__view-facets"></div>
-      <div class="search__facets"></div>
-      <div class="search__product-sort"></div>
+      <div class="search__filter-panel"></div>
       <div class="search__product-list"></div>
       <div class="search__pagination"></div>
     </div>
   `);
 
-  const $resultInfo = fragment.querySelector('.search__result-info');
+  const $resultBar = fragment.querySelector('.search__result-bar');
   const $viewFacets = fragment.querySelector('.search__view-facets');
-  const $facets = fragment.querySelector('.search__facets');
-  const $productSort = fragment.querySelector('.search__product-sort');
+  const $filterPanel = fragment.querySelector('.search__filter-panel');
   const $productList = fragment.querySelector('.search__product-list');
   const $pagination = fragment.querySelector('.search__pagination');
 
@@ -48,37 +102,106 @@ export default async function decorate(block) {
   const q = urlParams.get('q') || '';
   let currentPage = Number(urlParams.get('page')) || 1;
   let currentSort = urlParams.get('sort') || '';
+  let currentCategory = urlParams.get('category') || '';
 
   const pageSize = 8;
   const { baseUrl } = await getOroConfig();
 
-  // Render filter toggle button
-  const filterBtn = document.createElement('button');
-  filterBtn.className = 'dropin-button dropin-button--secondary';
-  filterBtn.textContent = labels.Global?.Filters || 'Filters';
-  filterBtn.addEventListener('click', () => {
-    $facets.classList.toggle('search__facets--visible');
-  });
-  $viewFacets.appendChild(filterBtn);
+  // --- Filter Panel ---
+  const panelHeader = document.createElement('div');
+  panelHeader.className = 'filter-panel__header';
 
-  // Render sort dropdown
-  const sortSelect = document.createElement('select');
-  sortSelect.className = 'search__sort-select';
-  sortSelect.innerHTML = `
-    <option value="">Relevance</option>
-    <option value="name">Name A-Z</option>
-    <option value="-name">Name Z-A</option>
-    <option value="minimalPrice">Price Low-High</option>
-    <option value="-minimalPrice">Price High-Low</option>
-  `;
-  if (currentSort) sortSelect.value = currentSort;
-  sortSelect.addEventListener('change', () => {
-    currentSort = sortSelect.value;
+  const panelTitle = document.createElement('h3');
+  panelTitle.className = 'filter-panel__title';
+  panelTitle.textContent = 'Filters';
+
+  const clearAllBtn = document.createElement('button');
+  clearAllBtn.className = 'filter-panel__clear';
+  clearAllBtn.textContent = 'Clear all';
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'filter-panel__close';
+  closeBtn.textContent = '\u00D7';
+  closeBtn.setAttribute('aria-label', 'Close filters');
+  closeBtn.addEventListener('click', () => {
+    $filterPanel.classList.remove('search__filter-panel--visible');
+  });
+
+  panelHeader.append(panelTitle, clearAllBtn, closeBtn);
+  $filterPanel.appendChild(panelHeader);
+
+  // Sort By accordion
+  const sortOptions = document.createElement('div');
+  sortOptions.className = 'filter-panel__options';
+  [
+    { value: '', label: 'Recommended' },
+    { value: 'minimalPrice', label: 'Price Low to High' },
+    { value: '-minimalPrice', label: 'Price High to Low' },
+  ].forEach(({ value, label }) => {
+    sortOptions.appendChild(
+      createFilterOption('filter-sort', value, label, currentSort === value),
+    );
+  });
+  sortOptions.addEventListener('change', (e) => {
+    currentSort = e.target.value;
     currentPage = 1;
     loadAndRender(); // eslint-disable-line no-use-before-define
   });
-  $productSort.appendChild(sortSelect);
+  $filterPanel.appendChild(createFilterAccordion('Sort By', sortOptions, true));
 
+  // Category accordion
+  const categoryOptions = document.createElement('div');
+  categoryOptions.className = 'filter-panel__options';
+  categoryOptions.appendChild(
+    createFilterOption('filter-category', '', 'All', !currentCategory),
+  );
+  try {
+    const tree = await getCategoryTree();
+    tree.forEach((node) => {
+      const cat = node._category;
+      if (!cat) return;
+      const title = cat.attributes?.title || cat.attributes?.name || `Category ${cat.id}`;
+      categoryOptions.appendChild(
+        createFilterOption('filter-category', cat.id, title, currentCategory === cat.id),
+      );
+    });
+  } catch (err) {
+    console.warn('Failed to load categories:', err);
+  }
+  categoryOptions.addEventListener('change', (e) => {
+    currentCategory = e.target.value;
+    currentPage = 1;
+    loadAndRender(); // eslint-disable-line no-use-before-define
+  });
+  $filterPanel.appendChild(createFilterAccordion('Category', categoryOptions));
+
+  // Ship accordion (placeholder)
+  const shipOptions = document.createElement('div');
+  shipOptions.className = 'filter-panel__options';
+  shipOptions.appendChild(createFilterOption('filter-ship', '', 'All', true));
+  $filterPanel.appendChild(createFilterAccordion('Ship', shipOptions));
+
+  // Clear all handler
+  clearAllBtn.addEventListener('click', () => {
+    currentSort = '';
+    currentCategory = '';
+    currentPage = 1;
+    sortOptions.querySelector('input[value=""]').checked = true;
+    categoryOptions.querySelector('input[value=""]').checked = true;
+    shipOptions.querySelector('input[value=""]').checked = true;
+    loadAndRender(); // eslint-disable-line no-use-before-define
+  });
+
+  // Mobile filter toggle
+  const filterBtn = document.createElement('button');
+  filterBtn.className = 'search__filter-toggle';
+  filterBtn.textContent = labels.Global?.Filters || 'Filters';
+  filterBtn.addEventListener('click', () => {
+    $filterPanel.classList.toggle('search__filter-panel--visible');
+  });
+  $viewFacets.appendChild(filterBtn);
+
+  // --- Load & Render ---
   async function loadAndRender() {
     $productList.innerHTML = '<div class="search__loading">Loading...</div>';
 
@@ -86,7 +209,7 @@ export default async function decorate(block) {
       const result = await listProducts({
         page: currentPage,
         pageSize,
-        categoryId: config.urlpath || undefined,
+        categoryId: currentCategory || config.urlpath || undefined,
         search: q || undefined,
         sort: currentSort || undefined,
       });
@@ -105,12 +228,18 @@ export default async function decorate(block) {
 
     block.classList.toggle('product-list-page--empty', totalCount === 0);
 
-    // Result info
-    $resultInfo.innerHTML = q
-      ? `${totalCount} results found for <strong>"${q}"</strong>.`
-      : `${totalCount} results found.`;
+    // Results bar
+    $resultBar.innerHTML = '';
+    const countEl = document.createElement('h2');
+    countEl.className = 'search__result-count';
+    countEl.textContent = q
+      ? `${totalCount} results for "${q}"`
+      : `${totalCount} Products`;
+    const disclaimer = document.createElement('span');
+    disclaimer.className = 'search__result-disclaimer';
+    $resultBar.append(countEl, disclaimer);
 
-    // Product grid
+    // Product list
     $productList.innerHTML = '';
 
     if (totalCount === 0) {
@@ -122,53 +251,85 @@ export default async function decorate(block) {
       const { attributes } = product;
       const name = attributes.name || attributes.names?.default || '';
       const { sku } = attributes;
+      const shortDesc = attributes.shortDescription || '';
       const priceData = getProductPrice(product);
       const imageUrl = getProductImageUrl(product, baseUrl);
       const productUrl = getProductLink(sku, sku);
 
       const card = document.createElement('div');
-      card.className = 'search__product-card';
+      card.className = 'search__deal-card';
 
-      const imgHtml = imageUrl
-        ? `<a href="${productUrl}"><img src="${imageUrl}" alt="${name}" loading="lazy" width="300" height="300" /></a>`
-        : `<a href="${productUrl}"><div class="search__product-card-placeholder"></div></a>`;
+      // Image section
+      const imageDiv = document.createElement('div');
+      imageDiv.className = 'deal-card__image';
+      if (imageUrl) {
+        imageDiv.innerHTML = `<a href="${productUrl}"><img src="${imageUrl}" alt="${name}" loading="lazy" width="300" height="200" /></a>`;
+      } else {
+        imageDiv.innerHTML = `<a href="${productUrl}"><div class="deal-card__image-placeholder"></div></a>`;
+      }
 
-      card.innerHTML = `
-        ${imgHtml}
-        <h3><a href="${productUrl}">${name}</a></h3>
-        <span class="search__product-price">${priceData ? formatPrice(priceData.price, priceData.currency) : ''}</span>
-        <div class="product-discovery-product-actions">
-          <div class="product-discovery-product-actions__add-to-cart">
-            <button class="dropin-button dropin-button--primary">${labels.Global?.AddProductToCart || 'Add to Cart'}</button>
-          </div>
-        </div>
-      `;
+      // Content section
+      const contentDiv = document.createElement('div');
+      contentDiv.className = 'deal-card__content';
 
-      const addBtn = card.querySelector('.product-discovery-product-actions__add-to-cart button');
-      addBtn.addEventListener('click', async () => {
+      const heading = document.createElement('h3');
+      heading.innerHTML = `<a href="${productUrl}">${name}</a>`;
+
+      const descDiv = document.createElement('div');
+      descDiv.className = 'deal-card__description';
+      const descText = document.createElement('div');
+      descText.className = 'deal-card__description-text';
+      descText.textContent = shortDesc;
+      descDiv.appendChild(descText);
+
+      const viewDetailsBtn = document.createElement('button');
+      viewDetailsBtn.className = 'deal-card__view-details';
+      viewDetailsBtn.textContent = 'View Details';
+      viewDetailsBtn.setAttribute('aria-expanded', 'false');
+
+      contentDiv.append(heading, descDiv, viewDetailsBtn);
+
+      // Price + CTA section
+      const priceCta = document.createElement('div');
+      priceCta.className = 'deal-card__price-cta';
+
+      const priceSpan = document.createElement('span');
+      priceSpan.className = 'deal-card__price';
+      priceSpan.textContent = priceData ? formatPrice(priceData.price, priceData.currency) : '';
+
+      const shopBtn = document.createElement('button');
+      shopBtn.className = 'deal-card__shop-btn';
+      shopBtn.textContent = 'SHOP NOW';
+
+      shopBtn.addEventListener('click', async () => {
         if (isGuest()) {
           window.location.href = rootLink(`${CUSTOMER_LOGIN_PATH}?returnUrl=${encodeURIComponent(window.location.pathname)}`);
           return;
         }
-        addBtn.disabled = true;
-        addBtn.textContent = 'Adding...';
+        shopBtn.disabled = true;
+        shopBtn.textContent = 'ADDING...';
         try {
           const units = attributes.unitPrecisions;
           const unitCode = units?.[0]?.unit?.id || 'item';
           await addToShoppingList(product.id, 1, unitCode);
-          addBtn.textContent = 'Added!';
+          shopBtn.textContent = 'ADDED!';
           setTimeout(() => {
-            addBtn.textContent = labels.Global?.AddProductToCart || 'Add to Cart';
-            addBtn.disabled = false;
+            shopBtn.textContent = 'SHOP NOW';
+            shopBtn.disabled = false;
           }, 2000);
         } catch (err) {
           console.error('Add to cart failed:', err);
-          addBtn.textContent = labels.Global?.AddProductToCart || 'Add to Cart';
-          addBtn.disabled = false;
+          shopBtn.textContent = 'SHOP NOW';
+          shopBtn.disabled = false;
         }
       });
 
+      priceCta.append(priceSpan, shopBtn);
+
+      card.append(imageDiv, contentDiv, priceCta);
       $productList.appendChild(card);
+
+      setupViewDetailsToggle(card);
     });
   }
 
@@ -178,15 +339,17 @@ export default async function decorate(block) {
 
     if (totalPages <= 1) return;
 
+    const handlePageClick = (page) => {
+      currentPage = page;
+      loadAndRender();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
     for (let i = 1; i <= totalPages; i += 1) {
       const btn = document.createElement('button');
       btn.className = `search__page-btn${i === activePage ? ' search__page-btn--active' : ''}`;
       btn.textContent = i;
-      btn.addEventListener('click', () => {
-        currentPage = i;
-        loadAndRender();
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      });
+      btn.addEventListener('click', () => handlePageClick(i));
       $pagination.appendChild(btn);
     }
   }
@@ -203,6 +366,11 @@ export default async function decorate(block) {
       url.searchParams.set('sort', currentSort);
     } else {
       url.searchParams.delete('sort');
+    }
+    if (currentCategory) {
+      url.searchParams.set('category', currentCategory);
+    } else {
+      url.searchParams.delete('category');
     }
     window.history.pushState({}, '', url.toString());
   }
