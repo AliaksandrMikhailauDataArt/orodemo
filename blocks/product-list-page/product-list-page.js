@@ -172,22 +172,7 @@ export default async function decorate(block) {
     createFilterOption('filter-category', '', 'All', !currentCategory),
   );
   const categoryMap = new Map([['', 'All']]);
-  try {
-    const tree = await getCategoryTree();
-    tree.forEach((node) => {
-      const cat = node._category;
-      if (!cat) return;
-      const title = cat.attributes?.title || cat.attributes?.name || `Category ${cat.id}`;
-      categoryMap.set(cat.id, title);
-      categoryOptions.appendChild(
-        createFilterOption('filter-category', cat.id, title, currentCategory === cat.id),
-      );
-    });
-  } catch (err) {
-    console.warn('Failed to load categories:', err);
-  }
-  const currentCatLabel = categoryMap.get(currentCategory) || 'All';
-  const categoryAccordion = createFilterAccordion('Category', categoryOptions, currentCatLabel);
+  const categoryAccordion = createFilterAccordion('Category', categoryOptions, 'All');
   categoryOptions.addEventListener('change', (e) => {
     currentCategory = e.target.value;
     const label = categoryMap.get(currentCategory) || 'All';
@@ -410,8 +395,25 @@ export default async function decorate(block) {
     window.history.pushState({}, '', url.toString());
   }
 
-  // Initial load
-  await loadAndRender();
+  // Fire category tree and initial product load in parallel
+  await Promise.all([
+    getCategoryTree().then((tree) => {
+      tree.forEach((node) => {
+        const cat = node._category;
+        if (!cat) return;
+        const title = cat.attributes?.title || cat.attributes?.name || `Category ${cat.id}`;
+        categoryMap.set(cat.id, title);
+        categoryOptions.appendChild(
+          createFilterOption('filter-category', cat.id, title, currentCategory === cat.id),
+        );
+      });
+      const catLabel = categoryMap.get(currentCategory) || 'All';
+      updateAccordionLabel(categoryAccordion, catLabel);
+    }).catch((err) => {
+      console.warn('Failed to load categories:', err);
+    }),
+    loadAndRender(),
+  ]);
 }
 
 async function getOroConfig() {
