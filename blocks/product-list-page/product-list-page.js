@@ -22,21 +22,24 @@ function createFilterOption(groupName, value, label, checked) {
   input.name = groupName;
   input.value = value;
   input.checked = checked;
+  const tick = document.createElement('span');
+  tick.className = 'filter-panel__tick';
   const span = document.createElement('span');
   span.textContent = label;
-  lbl.append(input, span);
+  lbl.append(input, tick, span);
   return lbl;
 }
 
-function createFilterAccordion(title, contentEl, openByDefault = false) {
+function createFilterAccordion(title, contentEl, selectedLabel = '') {
   const details = document.createElement('details');
   details.className = 'filter-panel__accordion';
-  if (openByDefault) details.open = true;
 
   const summary = document.createElement('summary');
   summary.className = 'filter-panel__accordion-summary';
   const titleSpan = document.createElement('span');
-  titleSpan.textContent = title;
+  titleSpan.className = 'filter-panel__accordion-title';
+  titleSpan.textContent = selectedLabel ? `${title} : ${selectedLabel}` : title;
+  titleSpan.dataset.baseTitle = title;
   const chevron = document.createElement('span');
   chevron.className = 'filter-panel__chevron';
   summary.append(titleSpan, chevron);
@@ -131,23 +134,29 @@ export default async function decorate(block) {
   $filterPanel.appendChild(panelHeader);
 
   // Sort By accordion
-  const sortOptions = document.createElement('div');
-  sortOptions.className = 'filter-panel__options';
-  [
+  const sortItems = [
     { value: '', label: 'Recommended' },
     { value: 'minimalPrice', label: 'Price Low to High' },
     { value: '-minimalPrice', label: 'Price High to Low' },
-  ].forEach(({ value, label }) => {
+  ];
+  const sortOptions = document.createElement('div');
+  sortOptions.className = 'filter-panel__options';
+  sortItems.forEach(({ value, label }) => {
     sortOptions.appendChild(
       createFilterOption('filter-sort', value, label, currentSort === value),
     );
   });
+  const currentSortLabel = sortItems.find((s) => s.value === currentSort)?.label || 'Recommended';
+  const sortAccordion = createFilterAccordion('Sort By', sortOptions, currentSortLabel);
   sortOptions.addEventListener('change', (e) => {
     currentSort = e.target.value;
+    const label = sortItems.find((s) => s.value === currentSort)?.label || 'Recommended';
+    const titleSpan = sortAccordion.querySelector('.filter-panel__accordion-title');
+    titleSpan.textContent = `${titleSpan.dataset.baseTitle} : ${label}`;
     currentPage = 1;
     loadAndRender(); // eslint-disable-line no-use-before-define
   });
-  $filterPanel.appendChild(createFilterAccordion('Sort By', sortOptions, true));
+  $filterPanel.appendChild(sortAccordion);
 
   // Category accordion
   const categoryOptions = document.createElement('div');
@@ -155,12 +164,14 @@ export default async function decorate(block) {
   categoryOptions.appendChild(
     createFilterOption('filter-category', '', 'All', !currentCategory),
   );
+  const categoryMap = new Map([['', 'All']]);
   try {
     const tree = await getCategoryTree();
     tree.forEach((node) => {
       const cat = node._category;
       if (!cat) return;
       const title = cat.attributes?.title || cat.attributes?.name || `Category ${cat.id}`;
+      categoryMap.set(cat.id, title);
       categoryOptions.appendChild(
         createFilterOption('filter-category', cat.id, title, currentCategory === cat.id),
       );
@@ -168,18 +179,24 @@ export default async function decorate(block) {
   } catch (err) {
     console.warn('Failed to load categories:', err);
   }
+  const currentCatLabel = categoryMap.get(currentCategory) || 'All';
+  const categoryAccordion = createFilterAccordion('Category', categoryOptions, currentCatLabel);
   categoryOptions.addEventListener('change', (e) => {
     currentCategory = e.target.value;
+    const label = categoryMap.get(currentCategory) || 'All';
+    const titleSpan = categoryAccordion.querySelector('.filter-panel__accordion-title');
+    titleSpan.textContent = `${titleSpan.dataset.baseTitle} : ${label}`;
     currentPage = 1;
     loadAndRender(); // eslint-disable-line no-use-before-define
   });
-  $filterPanel.appendChild(createFilterAccordion('Category', categoryOptions));
+  $filterPanel.appendChild(categoryAccordion);
 
   // Ship accordion (placeholder)
   const shipOptions = document.createElement('div');
   shipOptions.className = 'filter-panel__options';
   shipOptions.appendChild(createFilterOption('filter-ship', '', 'All', true));
-  $filterPanel.appendChild(createFilterAccordion('Ship', shipOptions));
+  const shipAccordion = createFilterAccordion('Ship', shipOptions, 'All');
+  $filterPanel.appendChild(shipAccordion);
 
   // Clear all handler
   clearAllBtn.addEventListener('click', () => {
@@ -189,6 +206,13 @@ export default async function decorate(block) {
     sortOptions.querySelector('input[value=""]').checked = true;
     categoryOptions.querySelector('input[value=""]').checked = true;
     shipOptions.querySelector('input[value=""]').checked = true;
+    // Reset accordion titles
+    const sortTitle = sortAccordion.querySelector('.filter-panel__accordion-title');
+    sortTitle.textContent = `${sortTitle.dataset.baseTitle} : Recommended`;
+    const catTitle = categoryAccordion.querySelector('.filter-panel__accordion-title');
+    catTitle.textContent = `${catTitle.dataset.baseTitle} : All`;
+    const shipTitle = shipAccordion.querySelector('.filter-panel__accordion-title');
+    shipTitle.textContent = `${shipTitle.dataset.baseTitle} : All`;
     loadAndRender(); // eslint-disable-line no-use-before-define
   });
 
@@ -235,9 +259,10 @@ export default async function decorate(block) {
     countEl.textContent = q
       ? `${totalCount} results for "${q}"`
       : `${totalCount} Products`;
-    const disclaimer = document.createElement('span');
-    disclaimer.className = 'search__result-disclaimer';
-    $resultBar.append(countEl, disclaimer);
+    const authorableText = document.createElement('span');
+    authorableText.className = 'search__result-note';
+    if (config.note) authorableText.textContent = config.note;
+    $resultBar.append(countEl, authorableText);
 
     // Product list
     $productList.innerHTML = '';
@@ -299,7 +324,7 @@ export default async function decorate(block) {
 
       const shopBtn = document.createElement('button');
       shopBtn.className = 'deal-card__shop-btn';
-      shopBtn.textContent = 'SHOP NOW';
+      shopBtn.textContent = 'ADD TO CART';
 
       shopBtn.addEventListener('click', async () => {
         if (isGuest()) {
@@ -314,12 +339,12 @@ export default async function decorate(block) {
           await addToShoppingList(product.id, 1, unitCode);
           shopBtn.textContent = 'ADDED!';
           setTimeout(() => {
-            shopBtn.textContent = 'SHOP NOW';
+            shopBtn.textContent = 'ADD TO CART';
             shopBtn.disabled = false;
           }, 2000);
         } catch (err) {
           console.error('Add to cart failed:', err);
-          shopBtn.textContent = 'SHOP NOW';
+          shopBtn.textContent = 'ADD TO CART';
           shopBtn.disabled = false;
         }
       });
