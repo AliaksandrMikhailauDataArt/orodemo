@@ -1,9 +1,4 @@
-import { getRootPath, isMultistore } from '@dropins/tools/lib/aem/configs.js';
-// Dropin Components
-import {
-  Button,
-  provider as UI,
-} from '@dropins/tools/components.js';
+import { getRootPath, isMultistore } from '../../scripts/commerce.js';
 
 // Block-level
 import createModal from '../modal/modal.js';
@@ -154,16 +149,15 @@ export default async function decorate(block) {
         }
       });
 
-      UI.render(Button, {
-        children: `${selected.text}`,
-        'data-testid': 'storeview-switcher-button',
-        className: 'storeview-switcher-button',
-        size: 'medium',
-        variant: 'teritary',
-        onClick: () => {
-          showModal(storeSwitcher);
-        },
-      })($storeSwitcherBtn);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'storeview-switcher-button';
+      btn.setAttribute('data-testid', 'storeview-switcher-button');
+      btn.textContent = selected.text;
+      btn.addEventListener('click', () => {
+        showModal(storeSwitcher);
+      });
+      $storeSwitcherBtn.appendChild(btn);
     }
   }
   while (fragment.firstElementChild) footer.append(fragment.firstElementChild);

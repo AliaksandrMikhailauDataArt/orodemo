@@ -33,12 +33,16 @@ export function getConfigValue(key) {
   return val;
 }
 
-function getRootPath() {
+export function getRootPath() {
   return _rootPath || '/';
 }
 
 function getListOfRootPaths() {
   return _rootPaths;
+}
+
+export function isMultistore() {
+  return _rootPaths.length >= 1;
 }
 
 function getCookie(name) {
