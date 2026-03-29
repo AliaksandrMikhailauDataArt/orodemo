@@ -8,7 +8,6 @@ import {
 import { readBlockConfig } from '../../scripts/aem.js';
 import {
   fetchPlaceholders,
-  getProductLink,
   rootLink,
   CUSTOMER_LOGIN_PATH,
 } from '../../scripts/commerce.js';
@@ -279,11 +278,10 @@ export default async function decorate(block) {
     products.forEach((product) => {
       const { attributes } = product;
       const name = attributes.name || attributes.names?.default || '';
-      const { sku } = attributes;
       const shortDesc = attributes.shortDescription || '';
       const priceData = getProductPrice(product);
       const imageUrl = getProductImageUrl(product, baseUrl);
-      const productUrl = getProductLink(sku, sku);
+      const productUrl = rootLink(`/catalog/product?productid=${product.id}`);
 
       const card = document.createElement('div');
       card.className = 'search__deal-card';

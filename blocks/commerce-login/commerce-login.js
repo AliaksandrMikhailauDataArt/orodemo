@@ -8,7 +8,7 @@ import {
 
 export default async function decorate(block) {
   if (checkIsAuthenticated()) {
-    window.location.href = rootLink('/products');
+    window.location.href = rootLink('/catalog');
     return;
   }
 
@@ -44,7 +44,7 @@ export default async function decorate(block) {
       const email = form.email.value;
       const password = form.password.value;
       await login(email, password);
-      window.location.href = rootLink('/products');
+      window.location.href = rootLink('/catalog');
     } catch (err) {
       errorDiv.textContent = err.message || 'Invalid credentials. Please try again.';
       errorDiv.hidden = false;

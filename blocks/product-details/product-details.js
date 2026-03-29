@@ -17,7 +17,6 @@ import {
   getProductSku,
   CUSTOMER_LOGIN_PATH,
 } from '../../scripts/commerce.js';
-import { getMetadata } from '../../scripts/aem.js';
 
 export default async function decorate(block) {
   const labels = await fetchPlaceholders();
@@ -63,20 +62,22 @@ export default async function decorate(block) {
 
   block.replaceChildren(fragment);
 
-  // Get product ID from metadata or URL
-  const productId = getMetadata('product-id') || getProductIdFromUrl();
-  if (!productId) {
-    $alert.innerHTML = '<div class="dropin-in-line-alert__content">Product not found.</div>';
+  // Get product ID from query parameter
+  const params = new URLSearchParams(window.location.search);
+  const productIdParam = params.get('productid');
+  const productId = Number(productIdParam);
+  if (!productIdParam || !Number.isInteger(productId) || productId <= 0) {
+    showAlert($alert, 'Invalid or missing product ID.');
     return;
   }
 
   // Fetch product
   let product;
   try {
-    product = await getProduct(productId);
+    product = await getProduct(String(productId));
   } catch (err) {
     console.error('Failed to load product:', err);
-    $alert.innerHTML = '<div class="dropin-in-line-alert__content">Failed to load product details.</div>';
+    showAlert($alert, 'Failed to load product details.');
     return;
   }
 
@@ -203,16 +204,6 @@ export default async function decorate(block) {
 
   // --- Meta tags ---
   setMetaTags(product, imageUrls);
-}
-
-function getProductIdFromUrl() {
-  const path = window.location.pathname;
-  // Try /products/{slug}/{id} pattern
-  const match = path.match(/\/products\/[\w-]+\/([\w-]+)(\.html)?$/);
-  if (match) return match[1];
-  // Try /products/{id} pattern
-  const match2 = path.match(/\/products\/([\w-]+)(\.html)?$/);
-  return match2 ? match2[1] : null;
 }
 
 function renderGallery(container, imageUrls, altText, mode) {
