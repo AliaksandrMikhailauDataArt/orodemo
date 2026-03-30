@@ -112,8 +112,8 @@ async function loadProduct(productId, labels, els) {
   }
 
   // --- Add to Cart Button (styled like PLP) ---
-  const units = attributes.unitPrecisions || [];
-  const selectedUnit = units.length > 0 ? (units[0].unit?.id || units[0].code || 'item') : 'item';
+  const prices = attributes.prices || [];
+  const selectedUnit = prices.length > 0 ? (prices[0].unit || 'item') : 'item';
 
   const addBtn = document.createElement('button');
   addBtn.className = 'product-details__add-to-cart';

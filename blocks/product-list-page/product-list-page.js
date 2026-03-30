@@ -329,8 +329,8 @@ export default async function decorate(block) {
         shopBtn.disabled = true;
         shopBtn.textContent = 'ADDING...';
         try {
-          const units = attributes.unitPrecisions;
-          const unitCode = units?.[0]?.unit?.id || 'item';
+          const prices = attributes.prices;
+          const unitCode = prices?.[0]?.unit || 'item';
           await addToShoppingList(product.id, 1, unitCode);
           shopBtn.textContent = 'ADDED!';
           setTimeout(() => {
