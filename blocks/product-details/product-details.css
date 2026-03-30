@@ -88,6 +88,17 @@
     display: none;
 }
 
+.product-details__short-description pre {
+    font: inherit;
+    color: inherit;
+    background: none;
+    padding: 0;
+    margin: 0;
+    border-radius: 0;
+    overflow: visible;
+    white-space: normal;
+}
+
 .product-details__short-description ul {
     list-style: none;
     padding-left: 0;
