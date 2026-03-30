@@ -1,6 +1,7 @@
 import {
   listProducts, addToShoppingList, isGuest, getCategoryTree,
 } from '../../scripts/oro-api.js';
+import { events } from '../../scripts/oro-events.js';
 import {
   getProductImageUrl,
   getProductPrice,
@@ -319,7 +320,24 @@ export default async function decorate(block) {
 
       const shopBtn = document.createElement('button');
       shopBtn.className = 'deal-card__shop-btn';
-      shopBtn.textContent = 'ADD TO CART';
+
+      function updateShopBtn() {
+        const cartData = events.lastPayload('oro/cart/data');
+        const inCart = cartData?.items?.some((item) => {
+          const pid = item._product?.id || item.relationships?.product?.data?.id;
+          return String(pid) === String(product.id);
+        });
+        if (inCart) {
+          shopBtn.textContent = 'ALREADY IN CART';
+          shopBtn.disabled = true;
+        } else {
+          shopBtn.textContent = 'ADD TO CART';
+          shopBtn.disabled = false;
+        }
+      }
+
+      updateShopBtn();
+      events.on('oro/cart/data', updateShopBtn);
 
       shopBtn.addEventListener('click', async () => {
         if (isGuest()) {
@@ -329,18 +347,12 @@ export default async function decorate(block) {
         shopBtn.disabled = true;
         shopBtn.textContent = 'ADDING...';
         try {
-          const prices = attributes.prices;
+          const { prices } = attributes;
           const unitCode = prices?.[0]?.unit || 'item';
           await addToShoppingList(product.id, 1, unitCode);
-          shopBtn.textContent = 'ADDED!';
-          setTimeout(() => {
-            shopBtn.textContent = 'ADD TO CART';
-            shopBtn.disabled = false;
-          }, 2000);
         } catch (err) {
           console.error('Add to cart failed:', err);
-          shopBtn.textContent = 'ADD TO CART';
-          shopBtn.disabled = false;
+          updateShopBtn();
         }
       });
 

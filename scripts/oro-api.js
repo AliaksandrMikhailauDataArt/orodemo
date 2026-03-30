@@ -211,6 +211,7 @@ async function oroFetch(path, options = {}) {
   const headers = {
     ...JSON_API_HEADERS,
     Authorization: `Bearer ${_accessToken}`,
+    'ngrok-skip-browser-warning': 'true',
     ...(options.headers || {}),
   };
 
@@ -224,6 +225,7 @@ async function oroFetch(path, options = {}) {
       const retryHeaders = {
         ...JSON_API_HEADERS,
         Authorization: `Bearer ${_accessToken}`,
+        'ngrok-skip-browser-warning': 'true',
         ...(options.headers || {}),
       };
       return fetch(url, { ...options, headers: retryHeaders });

@@ -117,7 +117,25 @@ async function loadProduct(productId, labels, els) {
 
   const addBtn = document.createElement('button');
   addBtn.className = 'product-details__add-to-cart';
-  addBtn.textContent = labels.Global?.AddProductToCart || 'ADD TO CART';
+
+  function updateCartButton() {
+    const cartData = events.lastPayload('oro/cart/data');
+    const inCart = cartData?.items?.some((item) => {
+      const pid = item._product?.id || item.relationships?.product?.data?.id;
+      return String(pid) === String(product.id);
+    });
+    if (inCart) {
+      addBtn.textContent = 'ALREADY IN CART';
+      addBtn.disabled = true;
+    } else {
+      addBtn.textContent = labels.Global?.AddProductToCart || 'ADD TO CART';
+      addBtn.disabled = false;
+    }
+  }
+
+  updateCartButton();
+  events.on('oro/cart/data', updateCartButton);
+
   addBtn.addEventListener('click', async () => {
     if (isGuest()) {
       window.location.href = rootLink(`${CUSTOMER_LOGIN_PATH}?returnUrl=${encodeURIComponent(window.location.href)}`);
@@ -127,16 +145,10 @@ async function loadProduct(productId, labels, els) {
     addBtn.textContent = labels.Global?.AddingToCart || 'ADDING...';
     try {
       await addToShoppingList(product.id, 1, selectedUnit);
-      addBtn.textContent = 'ADDED!';
-      setTimeout(() => {
-        addBtn.textContent = labels.Global?.AddProductToCart || 'ADD TO CART';
-        addBtn.disabled = false;
-      }, 2000);
     } catch (err) {
       console.error('Add to cart failed:', err);
       showAlert($alert, err.message || 'Failed to add product to cart.');
-      addBtn.textContent = labels.Global?.AddProductToCart || 'ADD TO CART';
-      addBtn.disabled = false;
+      updateCartButton();
     }
   });
   $actions.appendChild(addBtn);
