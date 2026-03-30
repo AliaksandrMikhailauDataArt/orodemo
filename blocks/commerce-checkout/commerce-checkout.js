@@ -289,7 +289,7 @@ export default async function decorate(block) {
       }
 
       // Place order
-      const paymentUrl = validation.paymentUrl;
+      const { paymentUrl } = validation;
       const orderResult = await placeOrder(paymentUrl);
 
       hideLoader();

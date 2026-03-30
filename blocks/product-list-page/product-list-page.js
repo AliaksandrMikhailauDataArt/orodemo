@@ -215,7 +215,7 @@ export default async function decorate(block) {
 
   // --- Load & Render ---
   async function loadAndRender() {
-    $productList.innerHTML = '<div class="search__loading">Loading...</div>';
+    $productList.innerHTML = '<div class="search__loading"><div class="search__spinner"></div></div>';
 
     try {
       const result = await listProducts({
@@ -291,7 +291,7 @@ export default async function decorate(block) {
       descDiv.className = 'deal-card__description';
       const descText = document.createElement('div');
       descText.className = 'deal-card__description-text';
-      descText.textContent = shortDesc;
+      descText.innerHTML = shortDesc;
       descDiv.appendChild(descText);
 
       const viewDetailsBtn = document.createElement('button');
@@ -395,8 +395,10 @@ export default async function decorate(block) {
     window.history.pushState({}, '', url.toString());
   }
 
-  // Fire category tree and initial product load in parallel
-  await Promise.all([
+  // Show spinner immediately, fire API calls without blocking page render
+  $productList.innerHTML = '<div class="search__loading"><div class="search__spinner"></div></div>';
+
+  Promise.all([
     getCategoryTree().then((tree) => {
       tree.forEach((node) => {
         const cat = node._category;

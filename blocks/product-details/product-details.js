@@ -6,59 +6,41 @@ import {
 } from '../../scripts/oro-api.js';
 import { events } from '../../scripts/oro-events.js';
 import {
-  getAllProductImageUrls,
+  getProductImageUrl,
   getProductPrice,
-  formatPrice,
 } from '../../scripts/oro-utils.js';
 import {
   rootLink,
   setJsonLd,
   fetchPlaceholders,
-  getProductSku,
   CUSTOMER_LOGIN_PATH,
 } from '../../scripts/commerce.js';
 
 export default async function decorate(block) {
   const labels = await fetchPlaceholders();
 
-  // Layout — same DOM skeleton as original
   const fragment = document.createRange().createContextualFragment(`
     <div class="product-details__alert"></div>
-    <div class="product-details__wrapper">
-      <div class="product-details__left-column">
-        <div class="product-details__gallery"></div>
-      </div>
-      <div class="product-details__right-column">
-        <div class="product-details__header"></div>
+    <div class="product-details__loading"><div class="product-details__spinner"></div></div>
+    <div class="product-details__wrapper" style="display:none">
+      <div class="product-details__image"></div>
+      <div class="product-details__info">
+        <h1 class="product-details__title"></h1>
         <div class="product-details__price"></div>
-        <div class="product-details__gallery"></div>
         <div class="product-details__short-description"></div>
-        <div class="product-details__gift-card-options"></div>
-        <div class="product-details__configuration">
-          <div class="product-details__options"></div>
-          <div class="product-details__quantity"></div>
-          <div class="product-details__buttons">
-            <div class="product-details__buttons__add-to-cart"></div>
-            <div class="product-details__buttons__add-to-wishlist"></div>
-          </div>
-        </div>
-        <div class="product-details__description"></div>
-        <div class="product-details__attributes"></div>
+        <div class="product-details__actions"></div>
       </div>
     </div>
   `);
 
   const $alert = fragment.querySelector('.product-details__alert');
-  const $gallery = fragment.querySelector('.product-details__left-column .product-details__gallery');
-  const $header = fragment.querySelector('.product-details__header');
+  const $loading = fragment.querySelector('.product-details__loading');
+  const $wrapper = fragment.querySelector('.product-details__wrapper');
+  const $image = fragment.querySelector('.product-details__image');
+  const $title = fragment.querySelector('.product-details__title');
   const $price = fragment.querySelector('.product-details__price');
-  const $galleryMobile = fragment.querySelector('.product-details__right-column .product-details__gallery');
   const $shortDescription = fragment.querySelector('.product-details__short-description');
-  const $options = fragment.querySelector('.product-details__options');
-  const $quantity = fragment.querySelector('.product-details__quantity');
-  const $addToCart = fragment.querySelector('.product-details__buttons__add-to-cart');
-  const $description = fragment.querySelector('.product-details__description');
-  const $attributes = fragment.querySelector('.product-details__attributes');
+  const $actions = fragment.querySelector('.product-details__actions');
 
   block.replaceChildren(fragment);
 
@@ -67,16 +49,28 @@ export default async function decorate(block) {
   const productIdParam = params.get('productid');
   const productId = Number(productIdParam);
   if (!productIdParam || !Number.isInteger(productId) || productId <= 0) {
+    $loading.remove();
     showAlert($alert, 'Invalid or missing product ID.');
     return;
   }
 
-  // Fetch product
+  // Fetch product without blocking page render
+  loadProduct(productId, labels, {
+    $alert, $loading, $wrapper, $image, $title, $price, $shortDescription, $actions,
+  });
+}
+
+async function loadProduct(productId, labels, els) {
+  const {
+    $alert, $loading, $wrapper, $image, $title, $price, $shortDescription, $actions,
+  } = els;
+
   let product;
   try {
     product = await getProduct(String(productId));
   } catch (err) {
     console.error('Failed to load product:', err);
+    $loading.remove();
     showAlert($alert, 'Failed to load product details.');
     return;
   }
@@ -84,25 +78,32 @@ export default async function decorate(block) {
   const { attributes } = product;
   const config = getConfig();
   const baseUrl = config?.baseUrl || '';
-  const imageUrls = getAllProductImageUrls(product, baseUrl);
+  const imageUrl = getProductImageUrl(product, baseUrl);
   const priceData = getProductPrice(product);
   const name = attributes.name || attributes.names?.default || '';
 
   // Emit product data for other blocks
   events.emit('oro/pdp/data', product);
 
-  // --- Render Gallery (Desktop) ---
-  renderGallery($gallery, imageUrls, name, 'thumbnailsColumn');
+  // --- Image (first only) ---
+  if (imageUrl) {
+    $image.innerHTML = `<img src="${imageUrl}" alt="${name}" loading="eager" width="600" height="600" />`;
+  } else {
+    $image.innerHTML = '<div class="product-details__image-placeholder">No image available</div>';
+  }
 
-  // --- Render Gallery (Mobile) ---
-  renderGallery($galleryMobile, imageUrls, name, 'dots');
+  // --- Title ---
+  $title.textContent = name;
 
-  // --- Header ---
-  $header.innerHTML = `<h1>${name}</h1><span class="product-details__sku">SKU: ${attributes.sku || ''}</span>`;
-
-  // --- Price ---
+  // --- Price (rounded to full dollars) ---
   if (priceData) {
-    $price.innerHTML = `<span class="product-details__price-value">${formatPrice(priceData.price, priceData.currency)}</span>`;
+    const rounded = Math.round(priceData.price);
+    $price.textContent = new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: priceData.currency || 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(rounded);
   }
 
   // --- Short Description ---
@@ -110,207 +111,53 @@ export default async function decorate(block) {
     $shortDescription.innerHTML = attributes.shortDescription;
   }
 
-  // --- Unit selector (Oro-specific: unitPrecisions) ---
+  // --- Add to Cart Button (styled like PLP) ---
   const units = attributes.unitPrecisions || [];
-  let selectedUnit = units.length > 0 ? (units[0].unit?.id || units[0].code || 'item') : 'item';
+  const selectedUnit = units.length > 0 ? (units[0].unit?.id || units[0].code || 'item') : 'item';
 
-  if (units.length > 1) {
-    const unitSelect = document.createElement('select');
-    unitSelect.className = 'product-details__unit-select';
-    units.forEach((u) => {
-      const opt = document.createElement('option');
-      const unitId = u.unit?.id || u.code || 'item';
-      opt.value = unitId;
-      opt.textContent = u.unit?.attributes?.label || unitId;
-      unitSelect.appendChild(opt);
-    });
-    unitSelect.value = selectedUnit;
-    unitSelect.addEventListener('change', () => {
-      selectedUnit = unitSelect.value;
-    });
-    $options.appendChild(unitSelect);
-  }
-
-  // --- Quantity ---
-  let quantity = 1;
-  const qtyContainer = document.createElement('div');
-  qtyContainer.className = 'product-details__qty-controls';
-  qtyContainer.innerHTML = `
-    <button class="qty-btn qty-minus" aria-label="Decrease quantity">-</button>
-    <input type="number" class="qty-input" min="1" value="1" />
-    <button class="qty-btn qty-plus" aria-label="Increase quantity">+</button>
-  `;
-  const qtyInput = qtyContainer.querySelector('.qty-input');
-  qtyContainer.querySelector('.qty-minus').addEventListener('click', () => {
-    if (quantity > 1) {
-      quantity -= 1;
-      qtyInput.value = quantity;
-    }
-  });
-  qtyContainer.querySelector('.qty-plus').addEventListener('click', () => {
-    quantity += 1;
-    qtyInput.value = quantity;
-  });
-  qtyInput.addEventListener('change', () => {
-    const val = parseInt(qtyInput.value, 10);
-    quantity = val > 0 ? val : 1;
-    qtyInput.value = quantity;
-  });
-  $quantity.appendChild(qtyContainer);
-
-  // --- Add to Cart Button ---
   const addBtn = document.createElement('button');
-  addBtn.className = 'dropin-button dropin-button--primary';
-  addBtn.textContent = labels.Global?.AddProductToCart || 'Add to Cart';
+  addBtn.className = 'product-details__add-to-cart';
+  addBtn.textContent = labels.Global?.AddProductToCart || 'ADD TO CART';
   addBtn.addEventListener('click', async () => {
     if (isGuest()) {
       window.location.href = rootLink(`${CUSTOMER_LOGIN_PATH}?returnUrl=${encodeURIComponent(window.location.href)}`);
       return;
     }
     addBtn.disabled = true;
-    addBtn.textContent = labels.Global?.AddingToCart || 'Adding...';
+    addBtn.textContent = labels.Global?.AddingToCart || 'ADDING...';
     try {
-      await addToShoppingList(product.id, quantity, selectedUnit);
-      addBtn.textContent = 'Added!';
+      await addToShoppingList(product.id, 1, selectedUnit);
+      addBtn.textContent = 'ADDED!';
       setTimeout(() => {
-        addBtn.textContent = labels.Global?.AddProductToCart || 'Add to Cart';
+        addBtn.textContent = labels.Global?.AddProductToCart || 'ADD TO CART';
         addBtn.disabled = false;
       }, 2000);
     } catch (err) {
       console.error('Add to cart failed:', err);
       showAlert($alert, err.message || 'Failed to add product to cart.');
-      addBtn.textContent = labels.Global?.AddProductToCart || 'Add to Cart';
+      addBtn.textContent = labels.Global?.AddProductToCart || 'ADD TO CART';
       addBtn.disabled = false;
     }
   });
-  $addToCart.appendChild(addBtn);
+  $actions.appendChild(addBtn);
 
-  // --- Description ---
-  if (attributes.description) {
-    $description.innerHTML = `<h2>Description</h2><div>${attributes.description}</div>`;
-  }
-
-  // --- Attributes table ---
-  if (attributes.unitPrecisions?.length > 0) {
-    const rows = attributes.unitPrecisions.map((u) => {
-      const unitLabel = u.unit?.attributes?.label || u.unit?.id || u.code || '';
-      return `<tr><td>Unit</td><td>${unitLabel}</td></tr>`;
-    }).join('');
-    $attributes.innerHTML = `<h2>Specifications</h2><table>${rows}</table>`;
-  }
+  // Show content, hide spinner
+  $loading.remove();
+  $wrapper.style.display = '';
 
   // --- JSON-LD ---
-  setJsonLdProduct(product, baseUrl, imageUrls);
+  setJsonLdProduct(product, baseUrl, imageUrl);
 
   // --- Meta tags ---
-  setMetaTags(product, imageUrls);
-}
-
-function renderGallery(container, imageUrls, altText, mode) {
-  if (!imageUrls || imageUrls.length === 0) {
-    container.innerHTML = '<div class="pdp-carousel"><div class="pdp-carousel__placeholder">No image available</div></div>';
-    return;
-  }
-
-  const carouselClass = mode === 'thumbnailsColumn'
-    ? 'pdp-carousel pdp-carousel--thumbnailsRow'
-    : 'pdp-carousel';
-
-  let currentIndex = 0;
-
-  const carousel = document.createElement('div');
-  carousel.className = carouselClass;
-
-  // Main image
-  const mainImgContainer = document.createElement('div');
-  mainImgContainer.className = 'pdp-carousel__main';
-  const mainImg = document.createElement('img');
-  mainImg.src = imageUrls[0];
-  mainImg.alt = altText;
-  mainImg.loading = 'eager';
-  mainImg.width = 960;
-  mainImg.height = 1191;
-  mainImgContainer.appendChild(mainImg);
-  carousel.appendChild(mainImgContainer);
-
-  function setActiveImage(index) {
-    currentIndex = index;
-    mainImg.src = imageUrls[index];
-  }
-
-  // Thumbnails (desktop) or dots (mobile)
-  if (mode === 'thumbnailsColumn' && imageUrls.length > 1) {
-    const thumbs = document.createElement('div');
-    thumbs.className = 'pdp-carousel__thumbnails';
-    imageUrls.forEach((url, i) => {
-      const btn = document.createElement('button');
-      btn.className = `pdp-carousel__thumb${i === 0 ? ' pdp-carousel__thumb--active' : ''}`;
-      btn.innerHTML = `<img src="${url}" alt="${altText} thumbnail ${i + 1}" width="80" height="80" loading="lazy" />`;
-      btn.addEventListener('click', () => {
-        setActiveImage(i);
-        thumbs.querySelectorAll('.pdp-carousel__thumb').forEach((t) => t.classList.remove('pdp-carousel__thumb--active'));
-        btn.classList.add('pdp-carousel__thumb--active');
-      });
-      thumbs.appendChild(btn);
-    });
-    carousel.appendChild(thumbs);
-  } else if (mode === 'dots' && imageUrls.length > 1) {
-    const dots = document.createElement('div');
-    dots.className = 'pdp-carousel__dots';
-    imageUrls.forEach((_, i) => {
-      const dot = document.createElement('button');
-      dot.className = `pdp-carousel__dot${i === 0 ? ' pdp-carousel__dot--active' : ''}`;
-      dot.setAttribute('aria-label', `Image ${i + 1}`);
-      dot.addEventListener('click', () => {
-        setActiveImage(i);
-        dots.querySelectorAll('.pdp-carousel__dot').forEach((d) => d.classList.remove('pdp-carousel__dot--active'));
-        dot.classList.add('pdp-carousel__dot--active');
-      });
-      dots.appendChild(dot);
-    });
-    carousel.appendChild(dots);
-  }
-
-  // Arrow buttons
-  if (imageUrls.length > 1) {
-    const prevBtn = document.createElement('button');
-    prevBtn.className = 'pdp-carousel__arrow pdp-carousel__arrow--prev';
-    prevBtn.setAttribute('aria-label', 'Previous image');
-    prevBtn.textContent = '\u2039';
-    prevBtn.addEventListener('click', () => {
-      const newIdx = (currentIndex - 1 + imageUrls.length) % imageUrls.length;
-      setActiveImage(newIdx);
-    });
-
-    const nextBtn = document.createElement('button');
-    nextBtn.className = 'pdp-carousel__arrow pdp-carousel__arrow--next';
-    nextBtn.setAttribute('aria-label', 'Next image');
-    nextBtn.textContent = '\u203A';
-    nextBtn.addEventListener('click', () => {
-      const newIdx = (currentIndex + 1) % imageUrls.length;
-      setActiveImage(newIdx);
-    });
-
-    carousel.appendChild(prevBtn);
-    carousel.appendChild(nextBtn);
-  }
-
-  container.appendChild(carousel);
+  setMetaTags(product, imageUrl);
 }
 
 function showAlert(container, message) {
-  container.innerHTML = `<div class="dropin-in-line-alert dropin-in-line-alert--error">
-    <div class="dropin-in-line-alert__content">${message}</div>
-    <button class="dropin-in-line-alert__close" aria-label="Dismiss">\u00d7</button>
-  </div>`;
-  const closeBtn = container.querySelector('.dropin-in-line-alert__close');
-  if (closeBtn) {
-    closeBtn.addEventListener('click', () => { container.innerHTML = ''; });
-  }
+  container.innerHTML = `<div class="product-details__alert-message">${message}</div>`;
   setTimeout(() => { container.innerHTML = ''; }, 5000);
 }
 
-function setJsonLdProduct(product, baseUrl, imageUrls) {
+function setJsonLdProduct(product, baseUrl, imageUrl) {
   const { attributes } = product;
   const priceData = getProductPrice(product);
   const name = attributes.name || attributes.names?.default || '';
@@ -320,7 +167,7 @@ function setJsonLdProduct(product, baseUrl, imageUrls) {
     '@type': 'Product',
     name,
     description: attributes.description || attributes.shortDescription || '',
-    image: imageUrls[0] || '',
+    image: imageUrl || '',
     sku: attributes.sku || '',
     productID: attributes.sku || product.id,
     url: window.location.href,
@@ -340,7 +187,7 @@ function setJsonLdProduct(product, baseUrl, imageUrls) {
   setJsonLd(ldJson, 'product');
 }
 
-function setMetaTags(product, imageUrls) {
+function setMetaTags(product, imageUrl) {
   const { attributes } = product;
   const name = attributes.name || attributes.names?.default || '';
   const priceData = getProductPrice(product);
@@ -365,8 +212,8 @@ function setMetaTags(product, imageUrls) {
   setMeta('og:title', 'property', name);
   setMeta('og:description', 'property', attributes.shortDescription || '');
   setMeta('og:url', 'property', window.location.href);
-  if (imageUrls[0]) {
-    setMeta('og:image', 'property', imageUrls[0]);
+  if (imageUrl) {
+    setMeta('og:image', 'property', imageUrl);
   }
   if (priceData) {
     setMeta('product:price:amount', 'property', String(priceData.price));
