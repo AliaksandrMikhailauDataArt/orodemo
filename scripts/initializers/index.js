@@ -12,7 +12,7 @@ export default async function initializeDropins() {
   const init = async () => {
     // Configure Oro API client — on localhost, route through the proxy server
     configure({
-      baseUrl: 'http://localhost:3001',
+      baseUrl: 'https://jamari-unsyntactic-wendie.ngrok-free.dev',
     });
 
     const hasUserToken = getUserTokenCookie();
