@@ -1,21 +1,16 @@
 import { events } from '../../scripts/oro-events.js';
 import {
   getDefaultShoppingList,
-  updateShoppingListItem,
   removeShoppingListItem,
-  isGuest,
-  getConfig,
 } from '../../scripts/oro-api.js';
 import {
   formatPrice,
-  resolveImageUrl,
 } from '../../scripts/oro-utils.js';
 import { readBlockConfig } from '../../scripts/aem.js';
 import {
   fetchPlaceholders,
   rootLink,
   checkIsAuthenticated,
-  CUSTOMER_LOGIN_PATH,
 } from '../../scripts/commerce.js';
 
 export default async function decorate(block) {
@@ -25,8 +20,6 @@ export default async function decorate(block) {
   } = readBlockConfig(block);
 
   const placeholders = await fetchPlaceholders();
-  const config = getConfig();
-  const baseUrl = config?.baseUrl || '';
 
   // Layout — same DOM skeleton as original
   const fragment = document.createRange().createContextualFragment(`
@@ -53,9 +46,6 @@ export default async function decorate(block) {
   block.innerHTML = '';
   block.appendChild(fragment);
 
-  // Debounce for quantity updates
-  const debounceTimers = {};
-
   function showNotification(message, type = 'success') {
     $notification.innerHTML = `
       <div class="dropin-in-line-alert dropin-in-line-alert--${type}">
@@ -65,6 +55,27 @@ export default async function decorate(block) {
     const closeBtn = $notification.querySelector('.dropin-in-line-alert__close');
     if (closeBtn) closeBtn.addEventListener('click', () => { $notification.innerHTML = ''; });
     setTimeout(() => { $notification.innerHTML = ''; }, 5000);
+  }
+
+  function setupViewDetailsToggle(card) {
+    const descText = card.querySelector('.cart__item-description-text');
+    const toggleBtn = card.querySelector('.cart__item-view-details');
+    if (!toggleBtn) return;
+    if (!descText || !descText.textContent.trim()) {
+      toggleBtn.style.display = 'none';
+      return;
+    }
+    requestAnimationFrame(() => {
+      if (descText.scrollHeight <= descText.clientHeight) {
+        toggleBtn.style.display = 'none';
+        return;
+      }
+      toggleBtn.addEventListener('click', () => {
+        const expanded = descText.classList.toggle('cart__item-description-text--expanded');
+        toggleBtn.textContent = expanded ? 'Hide Details' : 'View Details';
+        toggleBtn.setAttribute('aria-expanded', String(expanded));
+      });
+    });
   }
 
   function renderCartItems(cartData) {
@@ -89,81 +100,51 @@ export default async function decorate(block) {
 
     cartData.items.forEach((item) => {
       const product = item._product;
-      const unit = item._unit;
       const productName = product?.attributes?.name || 'Product';
-      const productSku = product?.attributes?.sku || '';
-      const qty = item.attributes?.quantity || 1;
+      const shortDesc = product?.attributes?.shortDescription || '';
       const linePrice = item.attributes?.value || 0;
       const currency = item.attributes?.currency || cartData.currency || 'USD';
-      const unitLabel = unit?.attributes?.label || unit?.id || '';
-
-      // Get image
-      let imageUrl = '';
-      if (product?.relationships?.images?.data?.length > 0) {
-        // Image would need to be resolved from included data
-        // For simplicity, use a placeholder approach
-        imageUrl = '';
-      }
+      const productUrl = rootLink(`/catalog/product?productid=${product?.id || ''}`);
 
       const itemEl = document.createElement('div');
       itemEl.className = 'cart__item';
       itemEl.dataset.itemId = item.id;
 
-      itemEl.innerHTML = `
-        <div class="cart__item-image">
-          ${imageUrl ? `<img src="${imageUrl}" alt="${productName}" width="100" height="100" loading="lazy" />` : '<div class="cart__item-image-placeholder"></div>'}
-        </div>
-        <div class="cart__item-info">
-          <h3 class="cart__item-name">${productName}</h3>
-          <span class="cart__item-sku">SKU: ${productSku}</span>
-          ${unitLabel ? `<span class="cart__item-unit">Unit: ${unitLabel}</span>` : ''}
-        </div>
-        <div class="dropin-cart-item__quantity">
-          <button class="qty-minus dropin-button" aria-label="Decrease quantity">-</button>
-          <input type="number" class="qty-input" min="1" value="${qty}" />
-          <button class="qty-plus dropin-button" aria-label="Increase quantity">+</button>
-        </div>
-        <div class="cart__item-price">${formatPrice(linePrice, currency)}</div>
-        <div class="dropin-cart-item__footer">
-          <button class="cart__item-remove dropin-button" aria-label="Remove item">\u00d7 Remove</button>
-        </div>
-      `;
+      // Product info with linked title + description
+      const infoDiv = document.createElement('div');
+      infoDiv.className = 'cart__item-info';
 
-      // Quantity controls
-      const qtyInput = itemEl.querySelector('.qty-input');
-      const minusBtn = itemEl.querySelector('.qty-minus');
-      const plusBtn = itemEl.querySelector('.qty-plus');
-      const removeBtn = itemEl.querySelector('.cart__item-remove');
+      const heading = document.createElement('h3');
+      heading.className = 'cart__item-name';
+      heading.innerHTML = `<a href="${productUrl}">${productName}</a>`;
 
-      function updateQty(newQty) {
-        if (newQty < 1) return;
-        qtyInput.value = newQty;
-        // Debounce API call
-        if (debounceTimers[item.id]) clearTimeout(debounceTimers[item.id]);
-        debounceTimers[item.id] = setTimeout(async () => {
-          try {
-            await updateShoppingListItem(item.id, newQty);
-          } catch (err) {
-            console.error('Failed to update quantity:', err);
-            showNotification('Failed to update quantity.', 'error');
-          }
-        }, 500);
-      }
+      const descDiv = document.createElement('div');
+      descDiv.className = 'cart__item-description';
+      const descText = document.createElement('div');
+      descText.className = 'cart__item-description-text';
+      descText.innerHTML = shortDesc;
+      descDiv.appendChild(descText);
 
-      minusBtn.addEventListener('click', () => {
-        const current = parseInt(qtyInput.value, 10) || 1;
-        updateQty(current - 1);
-      });
+      const viewDetailsBtn = document.createElement('button');
+      viewDetailsBtn.className = 'cart__item-view-details';
+      viewDetailsBtn.textContent = 'View Details';
+      viewDetailsBtn.setAttribute('aria-expanded', 'false');
 
-      plusBtn.addEventListener('click', () => {
-        const current = parseInt(qtyInput.value, 10) || 1;
-        updateQty(current + 1);
-      });
+      infoDiv.append(heading, descDiv, viewDetailsBtn);
 
-      qtyInput.addEventListener('change', () => {
-        const val = parseInt(qtyInput.value, 10);
-        if (val > 0) updateQty(val);
-      });
+      // Price
+      const priceDiv = document.createElement('div');
+      priceDiv.className = 'cart__item-price';
+      priceDiv.textContent = formatPrice(linePrice, currency);
+
+      // Remove button
+      const footer = document.createElement('div');
+      footer.className = 'dropin-cart-item__footer';
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'cart__item-remove';
+      removeBtn.setAttribute('aria-label', 'Remove item');
+      removeBtn.textContent = 'Remove';
+      footer.appendChild(removeBtn);
 
       removeBtn.addEventListener('click', async () => {
         try {
@@ -175,7 +156,10 @@ export default async function decorate(block) {
         }
       });
 
+      itemEl.append(infoDiv, priceDiv, footer);
       $list.appendChild(itemEl);
+
+      setupViewDetailsToggle(itemEl);
     });
   }
 
