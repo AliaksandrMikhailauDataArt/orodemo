@@ -4,7 +4,7 @@ import { loadFragment } from '../fragment/fragment.js';
 import { fetchPlaceholders, rootLink } from '../../scripts/commerce.js';
 
 import renderAuthCombine from './renderAuthCombine.js';
-import { renderAuthDropdown } from './renderAuthDropdown.js';
+import { renderAuthButton } from './renderAuthDropdown.js';
 
 // media query match that indicates mobile/tablet width
 const isDesktop = window.matchMedia('(min-width: 900px)');
@@ -207,19 +207,17 @@ export default async function decorate(block) {
 
   const navTools = nav.querySelector('.nav-tools');
 
-  /** Mini Cart */
+  /** Cart Button — navigates directly to /cart */
   const excludeMiniCartFromPaths = ['/checkout'];
 
   const minicart = document.createRange().createContextualFragment(`
      <div class="minicart-wrapper nav-tools-wrapper">
-       <button type="button" class="nav-cart-button" aria-label="Cart"></button>
-       <div class="minicart-panel nav-tools-panel"></div>
+       <a href="${rootLink('/cart')}" class="nav-cart-button" aria-label="Cart"></a>
      </div>
    `);
 
   navTools.append(minicart);
 
-  const minicartPanel = navTools.querySelector('.minicart-panel');
   const cartButton = navTools.querySelector('.nav-cart-button');
 
   if (excludeMiniCartFromPaths.includes(window.location.pathname)) {
@@ -231,34 +229,8 @@ export default async function decorate(block) {
     panel.classList.toggle('nav-tools-panel--show', show);
   }
 
-  // Lazy loading for mini cart fragment
-  let miniCartLoaded = false;
-  async function loadMiniCartFragment() {
-    if (miniCartLoaded) return;
-    miniCartLoaded = true;
-    const miniCartMeta = getMetadata('mini-cart');
-    const miniCartPath = miniCartMeta ? new URL(miniCartMeta, window.location).pathname : '/mini-cart';
-    try {
-      const miniCartFragment = await loadFragment(miniCartPath);
-      if (miniCartFragment?.firstElementChild) {
-        minicartPanel.append(miniCartFragment.firstElementChild);
-      }
-    } catch (err) {
-      console.warn('Failed to load mini cart fragment:', err);
-    }
-  }
-
-  function toggleMiniCart(state) {
-    if (state) loadMiniCartFragment();
-    togglePanel(minicartPanel, state);
-  }
-
-  cartButton.addEventListener('click', () => toggleMiniCart(!minicartPanel.classList.contains('nav-tools-panel--show')));
-
   // Cart Item Counter — uses Oro event bus
   events.on('oro/cart/data', (data) => {
-    if (data) loadMiniCartFragment();
-
     if (data?.totalQuantity) {
       cartButton.setAttribute('data-count', data.totalQuantity);
     } else {
@@ -310,10 +282,6 @@ export default async function decorate(block) {
 
   // Close panels when clicking outside
   document.addEventListener('click', (e) => {
-    if (!minicartPanel.contains(e.target) && !cartButton.contains(e.target)) {
-      toggleMiniCart(false);
-    }
-
     if (!searchPanel.contains(e.target) && !searchButton.contains(e.target)) {
       toggleSearch(false);
     }
@@ -358,5 +326,5 @@ export default async function decorate(block) {
     navSections,
     () => !isDesktop.matches && toggleMenu(nav, navSections, false),
   );
-  renderAuthDropdown(navTools);
+  renderAuthButton(navTools);
 }

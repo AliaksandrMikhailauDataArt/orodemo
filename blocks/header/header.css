@@ -275,8 +275,8 @@ header nav .nav-tools-panel--show {
 }
 
 /* Cart button */
-header nav .nav-tools button.nav-cart-button {
-    background-image: url('../../icons/cart.svg');
+header nav .nav-tools .nav-cart-button {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%230071f2' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z'/%3E%3Cline x1='3' y1='6' x2='21' y2='6'/%3E%3Cpath d='M16 10a4 4 0 0 1-8 0'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: center;
     background-size: 16px;
@@ -288,13 +288,18 @@ header nav .nav-tools button.nav-cart-button {
     border: none;
     cursor: pointer;
     transition: background-color var(--po-transition);
+    display: inline-block;
+    text-decoration: none;
+    color: var(--po-blue-cta);
+    box-sizing: border-box;
 }
 
-header nav .nav-tools button.nav-cart-button:hover {
+header nav .nav-tools .nav-cart-button:hover {
     background-color: var(--po-light-blue-hover);
+    text-decoration: none;
 }
 
-header nav .nav-tools button.nav-cart-button[data-count]::after {
+header nav .nav-tools .nav-cart-button[data-count]::after {
     content: attr(data-count);
     position: absolute;
     top: 2px;
@@ -334,7 +339,7 @@ header nav .nav-tools button.nav-wishlist-button:hover {
 /* Search button */
 header nav .nav-tools button.nav-search-button {
     font-size: 0;
-    background-image: url('../../icons/search.svg');
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%230071f2' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: center;
     background-size: 16px;
@@ -698,88 +703,31 @@ header .nav-search-input .search_autocomplete .popover-container {
 }
 
 /* ===================================================================
-   Auth Dropdown
+   Sign Out Button
    =================================================================== */
-.dropdown-wrapper.nav-tools-wrapper .nav-dropdown-button {
-    font-size: 0.875rem !important;
-    font-weight: 500 !important;
-    letter-spacing: -0.28px !important;
-    background-color: transparent;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    display: flex;
-    justify-content: center;
+.signout-wrapper.nav-tools-wrapper .nav-signout-button {
+    display: none;
     align-items: center;
-    width: auto;
-    min-width: 40px;
-}
-
-.dropdown-wrapper.nav-tools-wrapper .nav-auth-menu-panel {
-    font-size: 0.875rem !important;
-    letter-spacing: -0.28px !important;
-    width: 100%;
-}
-
-@media (min-width: 1024px) {
-    .dropdown-wrapper.nav-tools-wrapper .nav-auth-menu-panel {
-        width: 398px;
-    }
-}
-
-.dropdown-wrapper.nav-tools-wrapper .nav-auth-menu-panel .authenticated-user-menu {
-    list-style: none;
+    gap: 6px;
+    background-color: var(--po-white);
+    color: var(--po-blue-cta);
+    border: 1.5px solid var(--po-blue-cta);
+    border-radius: var(--po-pill-radius);
+    padding: 8px 16px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: -0.28px;
     cursor: pointer;
-    padding: 0;
-    margin: 0;
-    overflow: hidden;
+    white-space: nowrap;
+    transition: background var(--po-transition), color var(--po-transition);
 }
 
-.dropdown-wrapper.nav-tools-wrapper .nav-auth-menu-panel .authenticated-user-menu li {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.dropdown-wrapper.nav-tools-wrapper .nav-auth-menu-panel .authenticated-user-menu li > a {
-    padding: 12px 15px;
-    display: inline-block;
-    width: 100%;
-    text-decoration: none;
-    color: var(--po-navy);
-    transition: background var(--po-transition);
-}
-
-.dropdown-wrapper.nav-tools-wrapper .nav-auth-menu-panel .authenticated-user-menu li > a:hover,
-.dropdown-wrapper.nav-tools-wrapper
-.nav-auth-menu-panel
-.authenticated-user-menu
-li
-> .logoutButton:hover {
+.signout-wrapper.nav-tools-wrapper .nav-signout-button:hover {
     background-color: var(--po-light-blue-hover);
 }
 
-.dropdown-wrapper.nav-tools-wrapper .nav-auth-menu-panel .authenticated-user-menu li button {
-    cursor: pointer;
-    background-color: transparent !important;
-    color: var(--po-navy) !important;
-    padding: 12px 15px !important;
-    display: inline-block !important;
-    width: 100% !important;
-    text-decoration: none !important;
-    font-size: 0.875rem !important;
-    font-weight: 600 !important;
-    letter-spacing: -0.28px !important;
-    margin: 0 !important;
-    text-align: start !important;
-    box-sizing: border-box !important;
-    border: none !important;
-    border-radius: 0 !important;
-}
-
-.dropdown-wrapper.nav-tools-wrapper .nav-auth-menu-panel .authenticated-user-menu li button:hover {
-    background-color: var(--po-light-blue-hover) !important;
-    border-radius: 0 !important;
+.signout-wrapper.nav-tools-wrapper .nav-signout-button svg {
+    flex-shrink: 0;
 }
 
 .grecaptcha-badge {
