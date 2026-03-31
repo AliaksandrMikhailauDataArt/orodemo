@@ -328,11 +328,13 @@ export default async function decorate(block) {
           return String(pid) === String(product.id);
         });
         if (inCart) {
-          shopBtn.textContent = 'ALREADY IN CART';
-          shopBtn.disabled = true;
+          shopBtn.textContent = 'GO TO CART';
+          shopBtn.disabled = false;
+          shopBtn.dataset.inCart = 'true';
         } else {
           shopBtn.textContent = 'ADD TO CART';
           shopBtn.disabled = false;
+          delete shopBtn.dataset.inCart;
         }
       }
 
@@ -340,6 +342,10 @@ export default async function decorate(block) {
       events.on('oro/cart/data', updateShopBtn);
 
       shopBtn.addEventListener('click', async () => {
+        if (shopBtn.dataset.inCart) {
+          window.location.href = rootLink('/cart');
+          return;
+        }
         if (isGuest()) {
           window.location.href = rootLink(`${CUSTOMER_LOGIN_PATH}?returnUrl=${encodeURIComponent(window.location.pathname)}`);
           return;

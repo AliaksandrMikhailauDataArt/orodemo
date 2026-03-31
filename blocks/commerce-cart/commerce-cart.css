@@ -113,13 +113,13 @@
     padding-top: 0;
 }
 
-/* Cart Item — Info */
+/* Cart Item — Header Row (title + price/remove) */
 
-.cart__item-info {
-    flex: 1;
+.cart__item-header {
     display: flex;
-    flex-direction: column;
-    gap: var(--spacing-xxsmall);
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-medium);
 }
 
 .cart__item-name {
@@ -127,6 +127,8 @@
     font-size: 20px;
     font-weight: 700;
     line-height: 1.3;
+    flex: 1;
+    min-width: 0;
 }
 
 .cart__item-name a {
@@ -136,6 +138,13 @@
 
 .cart__item-name a:hover {
     text-decoration: underline;
+}
+
+.cart__item-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-small);
+    flex-shrink: 0;
 }
 
 /* Cart Item — Description Clamp (mirrors PLP deal-card__description) */
@@ -218,14 +227,7 @@
     line-height: 1;
 }
 
-/* Cart Item — Footer / Remove */
-
-.dropin-cart-item__footer {
-    margin-top: var(--spacing-xxsmall);
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-xsmall);
-}
+/* Cart Item — Remove Button */
 
 .cart__item-remove {
     display: inline-flex;
@@ -246,6 +248,11 @@
 .cart__item-remove:hover {
     background: var(--color-brand-red-600);
     box-shadow: 0 2px 8px rgb(177 15 38 / 25%);
+}
+
+.cart__item-remove:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
 }
 
 /* Right Column — Summary Card */
@@ -304,7 +311,8 @@
 
 /* Checkout CTA — Gradient Pill */
 
-a.dropin-button.cart__checkout-btn {
+a.dropin-button.cart__checkout-btn,
+button.dropin-button.cart__checkout-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -328,11 +336,18 @@ a.dropin-button.cart__checkout-btn {
     text-overflow: ellipsis;
 }
 
-a.dropin-button.cart__checkout-btn:hover {
+a.dropin-button.cart__checkout-btn:hover,
+button.dropin-button.cart__checkout-btn:hover {
     opacity: 0.9;
     box-shadow: 0 4px 12px rgb(0 87 184 / 30%);
     color: #fff;
     text-decoration: none;
+}
+
+button.dropin-button.cart__checkout-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    box-shadow: none;
 }
 
 /* Loading Spinner */
@@ -417,8 +432,4 @@ a.dropin-button.cart__checkout-btn:hover {
         align-self: start;
     }
 
-    .cart__item-price {
-        min-width: 100px;
-        text-align: right;
-    }
 }

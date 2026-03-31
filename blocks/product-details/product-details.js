@@ -125,11 +125,13 @@ async function loadProduct(productId, labels, els) {
       return String(pid) === String(product.id);
     });
     if (inCart) {
-      addBtn.textContent = 'ALREADY IN CART';
-      addBtn.disabled = true;
+      addBtn.textContent = 'GO TO CART';
+      addBtn.disabled = false;
+      addBtn.dataset.inCart = 'true';
     } else {
       addBtn.textContent = labels.Global?.AddProductToCart || 'ADD TO CART';
       addBtn.disabled = false;
+      delete addBtn.dataset.inCart;
     }
   }
 
@@ -137,6 +139,10 @@ async function loadProduct(productId, labels, els) {
   events.on('oro/cart/data', updateCartButton);
 
   addBtn.addEventListener('click', async () => {
+    if (addBtn.dataset.inCart) {
+      window.location.href = rootLink('/cart');
+      return;
+    }
     if (isGuest()) {
       window.location.href = rootLink(`${CUSTOMER_LOGIN_PATH}?returnUrl=${encodeURIComponent(window.location.href)}`);
       return;

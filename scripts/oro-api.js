@@ -516,6 +516,15 @@ export async function createCheckout(shoppingListId) {
   return resp.json();
 }
 
+export async function getCheckouts() {
+  const resp = await oroGet('/api/checkouts?include=lineItems.product');
+  const json = await resp.json();
+  return {
+    checkouts: (json.data || []).map((c) => resolveRelationships(c, json.included)),
+    included: json.included || [],
+  };
+}
+
 export async function getCheckout(checkoutId) {
   const resp = await oroGet(`/api/checkouts/${checkoutId}?include=lineItems.product`);
   const json = await resp.json();
@@ -544,6 +553,21 @@ export async function setCheckoutAddresses(checkoutId, data) {
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
     throw new Error(err.errors?.[0]?.detail || 'Failed to set addresses');
+  }
+  return resp.json();
+}
+
+export async function updateCheckout(checkoutId, attributes) {
+  const resp = await oroPatch(`/api/checkouts/${checkoutId}`, {
+    data: {
+      type: 'checkouts',
+      id: String(checkoutId),
+      attributes,
+    },
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.errors?.[0]?.detail || 'Failed to update checkout');
   }
   return resp.json();
 }

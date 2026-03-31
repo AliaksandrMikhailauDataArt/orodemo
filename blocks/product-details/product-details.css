@@ -158,6 +158,14 @@
     cursor: not-allowed;
 }
 
+.product-details__add-to-cart[data-in-cart="true"] {
+    background: var(--color-brand-red-600);
+}
+
+.product-details__add-to-cart[data-in-cart="true"]:hover {
+    box-shadow: 0 4px 12px rgb(142 12 30 / 30%);
+}
+
 /* Loading Spinner */
 
 .product-details__loading {

@@ -1,6 +1,8 @@
 import { events } from '../../scripts/oro-events.js';
 import {
   removeShoppingListItem,
+  createCheckout,
+  getDefaultShoppingListId,
 } from '../../scripts/oro-api.js';
 import {
   formatPrice,
@@ -31,7 +33,7 @@ export default async function decorate(block) {
         <div class="cart__gift-options"></div>
       </div>
     </div>
-    <div class="cart__empty-cart"></div>
+    <div class="cart__empty-cart" hidden></div>
   `);
 
   const $wrapper = fragment.querySelector('.cart__wrapper');
@@ -111,14 +113,43 @@ export default async function decorate(block) {
       itemEl.className = 'cart__item';
       itemEl.dataset.itemId = item.id;
 
-      // Product info with linked title + description
-      const infoDiv = document.createElement('div');
-      infoDiv.className = 'cart__item-info';
+      // Header row: title (left) + price & remove (right)
+      const headerRow = document.createElement('div');
+      headerRow.className = 'cart__item-header';
 
       const heading = document.createElement('h3');
       heading.className = 'cart__item-name';
       heading.innerHTML = `<a href="${productUrl}">${productName}</a>`;
 
+      const actions = document.createElement('div');
+      actions.className = 'cart__item-actions';
+
+      const priceDiv = document.createElement('div');
+      priceDiv.className = 'cart__item-price';
+      priceDiv.textContent = formatPrice(linePrice, currency);
+
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'cart__item-remove';
+      removeBtn.setAttribute('aria-label', 'Remove item');
+      removeBtn.textContent = 'Remove';
+
+      removeBtn.addEventListener('click', async () => {
+        removeBtn.disabled = true;
+        removeBtn.textContent = 'REMOVING...';
+        try {
+          await removeShoppingListItem(item.id);
+        } catch (err) {
+          console.error('Failed to remove item:', err);
+          showNotification('Failed to remove item.', 'error');
+          removeBtn.disabled = false;
+          removeBtn.textContent = 'Remove';
+        }
+      });
+
+      actions.append(priceDiv, removeBtn);
+      headerRow.append(heading, actions);
+
+      // Description
       const descDiv = document.createElement('div');
       descDiv.className = 'cart__item-description';
       const descText = document.createElement('div');
@@ -131,33 +162,7 @@ export default async function decorate(block) {
       viewDetailsBtn.textContent = 'View Details';
       viewDetailsBtn.setAttribute('aria-expanded', 'false');
 
-      infoDiv.append(heading, descDiv, viewDetailsBtn);
-
-      // Price
-      const priceDiv = document.createElement('div');
-      priceDiv.className = 'cart__item-price';
-      priceDiv.textContent = formatPrice(linePrice, currency);
-
-      // Remove button
-      const footer = document.createElement('div');
-      footer.className = 'dropin-cart-item__footer';
-      const removeBtn = document.createElement('button');
-      removeBtn.className = 'cart__item-remove';
-      removeBtn.setAttribute('aria-label', 'Remove item');
-      removeBtn.textContent = 'Remove';
-      footer.appendChild(removeBtn);
-
-      removeBtn.addEventListener('click', async () => {
-        try {
-          await removeShoppingListItem(item.id);
-          showNotification(`${productName} removed from cart.`);
-        } catch (err) {
-          console.error('Failed to remove item:', err);
-          showNotification('Failed to remove item.', 'error');
-        }
-      });
-
-      itemEl.append(infoDiv, priceDiv, footer);
+      itemEl.append(headerRow, descDiv, viewDetailsBtn);
       $list.appendChild(itemEl);
 
       setupViewDetailsToggle(itemEl);
@@ -173,6 +178,8 @@ export default async function decorate(block) {
     const currency = cartData.currency || 'USD';
     const checkoutHref = checkoutURL ? rootLink(checkoutURL) : rootLink('/checkout');
 
+    const checkoutLabel = placeholders.Global?.Checkout || 'Proceed to Checkout';
+
     $summary.innerHTML = `
       <div class="cart-cart-summary-list">
         <div class="cart-cart-summary-list__heading">
@@ -186,11 +193,36 @@ export default async function decorate(block) {
           <span><strong>Estimated Total</strong></span>
           <span><strong>${formatPrice(cartData.subtotal, currency)}</strong></span>
         </div>
-        <a href="${checkoutHref}" class="dropin-button dropin-button--primary cart__checkout-btn">
-          ${placeholders.Global?.Checkout || 'Proceed to Checkout'}
-        </a>
+        <button class="dropin-button dropin-button--primary cart__checkout-btn">
+          ${checkoutLabel}
+        </button>
       </div>
     `;
+
+    const checkoutBtn = $summary.querySelector('.cart__checkout-btn');
+    if (checkoutBtn) {
+      checkoutBtn.addEventListener('click', async () => {
+        checkoutBtn.disabled = true;
+        checkoutBtn.textContent = 'Creating checkout...';
+        try {
+          const shoppingListId = getDefaultShoppingListId();
+          if (!shoppingListId) {
+            showNotification('Your cart is empty.', 'error');
+            checkoutBtn.disabled = false;
+            checkoutBtn.textContent = checkoutLabel;
+            return;
+          }
+          await createCheckout(shoppingListId);
+          window.location.href = checkoutHref;
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error('Failed to create checkout:', err);
+          showNotification('Failed to start checkout. Please try again.', 'error');
+          checkoutBtn.disabled = false;
+          checkoutBtn.textContent = checkoutLabel;
+        }
+      });
+    }
   }
 
   // Listen for cart data (eager: true fires immediately if initializer already loaded it)

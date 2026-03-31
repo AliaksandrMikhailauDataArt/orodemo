@@ -415,6 +415,14 @@
     cursor: not-allowed;
 }
 
+.block.product-list-page .deal-card__shop-btn[data-in-cart="true"] {
+    background: var(--color-brand-red-600);
+}
+
+.block.product-list-page .deal-card__shop-btn[data-in-cart="true"]:hover {
+    box-shadow: 0 4px 12px rgb(142 12 30 / 30%);
+}
+
 /* Pagination */
 
 .block.product-list-page .search__pagination {
@@ -491,6 +499,15 @@
     .block.product-list-page .search__view-facets {
         display: none;
     }
+}
+
+/* Widen PLP section to match header nav so filter left edge aligns with logo */
+@media only screen and (min-width: 900px) {
+    main > .section:has(.product-list-page) > div {
+        max-width: 1568px;
+        padding: 0 40px;
+    }
+}
 
     .block.product-list-page .search__filter-panel {
         display: block;
