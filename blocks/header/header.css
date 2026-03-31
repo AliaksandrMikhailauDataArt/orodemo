@@ -530,6 +530,16 @@ header .nav-search-input .search_autocomplete .popover-container {
         color: inherit;
     }
 
+    /* --- Chevron for categories with children --- */
+    header nav .nav-sections .default-content-wrapper > ul > li.nav-drop::after {
+        content: '\276F';
+        display: inline-block;
+        transform: rotate(90deg);
+        font-size: 0.75rem;
+        color: currentcolor;
+        margin-left: 4px;
+    }
+
     /* --- Dropdown inner items --- */
     header nav .nav-sections .default-content-wrapper > ul > li ul > li {
         padding: 8px 12px;
@@ -549,10 +559,10 @@ header .nav-search-input .search_autocomplete .popover-container {
     }
 
     header nav .nav-sections .default-content-wrapper > ul > li ul > li a {
-        color: rgb(23 58 135 / 75%);
-        font-size: 1rem;
+        color: var(--po-navy);
+        font-size: 0.875rem;
         font-weight: 500;
-        line-height: 1.62;
+        line-height: 1.57;
         letter-spacing: -0.28px;
         text-decoration: none;
         transition: color var(--po-transition);
