@@ -709,6 +709,8 @@ header .nav-search-input .search_autocomplete .popover-container {
     display: none;
     align-items: center;
     gap: 6px;
+    width: auto;
+    height: auto;
     background-color: var(--po-white);
     color: var(--po-blue-cta);
     border: 1.5px solid var(--po-blue-cta);

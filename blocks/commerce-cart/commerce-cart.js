@@ -1,6 +1,5 @@
 import { events } from '../../scripts/oro-events.js';
 import {
-  getDefaultShoppingList,
   removeShoppingListItem,
 } from '../../scripts/oro-api.js';
 import {
@@ -10,7 +9,6 @@ import { readBlockConfig } from '../../scripts/aem.js';
 import {
   fetchPlaceholders,
   rootLink,
-  checkIsAuthenticated,
 } from '../../scripts/commerce.js';
 
 export default async function decorate(block) {
@@ -45,6 +43,9 @@ export default async function decorate(block) {
 
   block.innerHTML = '';
   block.appendChild(fragment);
+
+  // Show spinner while waiting for cart data
+  $list.innerHTML = '<div class="cart__loading"><div class="cart__spinner"></div></div>';
 
   function showNotification(message, type = 'success') {
     $notification.innerHTML = `
@@ -192,24 +193,9 @@ export default async function decorate(block) {
     `;
   }
 
-  // Initial load
-  if (checkIsAuthenticated()) {
-    try {
-      const cartData = await getDefaultShoppingList();
-      renderCartItems(cartData);
-      renderSummary(cartData);
-    } catch (err) {
-      console.error('Failed to load cart:', err);
-    }
-  } else {
-    // Guest — show empty cart
-    renderCartItems(null);
-    renderSummary(null);
-  }
-
-  // Listen for cart updates
+  // Listen for cart data (eager: true fires immediately if initializer already loaded it)
   events.on('oro/cart/data', (cartData) => {
     renderCartItems(cartData);
     renderSummary(cartData);
-  });
+  }, { eager: true });
 }
