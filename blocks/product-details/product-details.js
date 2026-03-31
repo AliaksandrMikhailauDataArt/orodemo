@@ -8,6 +8,7 @@ import { events } from '../../scripts/oro-events.js';
 import {
   getProductImageUrl,
   getProductPrice,
+  fetchImageAsObjectUrl,
 } from '../../scripts/oro-utils.js';
 import {
   rootLink,
@@ -85,9 +86,19 @@ async function loadProduct(productId, labels, els) {
   // Emit product data for other blocks
   events.emit('oro/pdp/data', product);
 
-  // --- Image (first only) ---
+  // --- Image (first only, fetched with ngrok headers) ---
   if (imageUrl) {
-    $image.innerHTML = `<img src="${imageUrl}" alt="${name}" loading="eager" width="600" height="600" />`;
+    const img = document.createElement('img');
+    img.alt = name;
+    img.width = 600;
+    img.height = 600;
+    img.loading = 'eager';
+    $image.appendChild(img);
+    fetchImageAsObjectUrl(imageUrl).then((blobUrl) => {
+      img.src = blobUrl;
+    }).catch(() => {
+      img.src = imageUrl;
+    });
   } else {
     $image.innerHTML = '<div class="product-details__image-placeholder">No image available</div>';
   }

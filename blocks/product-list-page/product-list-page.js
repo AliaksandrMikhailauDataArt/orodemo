@@ -5,6 +5,7 @@ import { events } from '../../scripts/oro-events.js';
 import {
   getProductImageUrl,
   getProductPrice,
+  fetchImageAsObjectUrl,
 } from '../../scripts/oro-utils.js';
 import { readBlockConfig } from '../../scripts/aem.js';
 import {
@@ -272,11 +273,24 @@ export default async function decorate(block) {
       const card = document.createElement('div');
       card.className = 'search__deal-card';
 
-      // Image section
+      // Image section (fetched with ngrok headers)
       const imageDiv = document.createElement('div');
       imageDiv.className = 'deal-card__image';
       if (imageUrl) {
-        imageDiv.innerHTML = `<a href="${productUrl}"><img src="${imageUrl}" alt="${name}" loading="lazy" width="300" height="200" /></a>`;
+        const link = document.createElement('a');
+        link.href = productUrl;
+        const img = document.createElement('img');
+        img.alt = name;
+        img.loading = 'lazy';
+        img.width = 300;
+        img.height = 200;
+        link.appendChild(img);
+        imageDiv.appendChild(link);
+        fetchImageAsObjectUrl(imageUrl).then((blobUrl) => {
+          img.src = blobUrl;
+        }).catch(() => {
+          img.src = imageUrl;
+        });
       } else {
         imageDiv.innerHTML = `<a href="${productUrl}"><div class="deal-card__image-placeholder"></div></a>`;
       }

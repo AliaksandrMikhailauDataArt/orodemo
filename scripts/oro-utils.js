@@ -131,6 +131,21 @@ export function getAllProductImageUrls(product, baseUrl) {
 }
 
 /**
+ * Fetch an image via fetch() with custom headers (e.g. ngrok-skip-browser-warning)
+ * and return an object URL suitable for use as an img src.
+ * @param {string} url - The image URL to fetch
+ * @returns {Promise<string>} Object URL for the fetched image blob
+ */
+export async function fetchImageAsObjectUrl(url) {
+  const resp = await fetch(url, {
+    headers: { 'ngrok-skip-browser-warning': 'true' },
+  });
+  if (!resp.ok) throw new Error(`Image fetch failed: ${resp.status}`);
+  const blob = await resp.blob();
+  return URL.createObjectURL(blob);
+}
+
+/**
  * Get the product price from a product resource.
  * @param {Object} product - Product resource
  * @returns {{ price: number, currency: string }|null}

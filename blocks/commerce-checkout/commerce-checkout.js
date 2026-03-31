@@ -83,7 +83,6 @@ export default async function decorate(block) {
   let selectedPaymentMethod = null;
   let availableBillingAddresses = [];
   let shippingReady = false;
-  let paymentReady = false;
   let addressReady = false;
 
   // Full-page loader only used for place-order action
@@ -253,7 +252,6 @@ export default async function decorate(block) {
         `;
         label.querySelector('input').addEventListener('change', () => {
           selectedPaymentMethod = method.id;
-          paymentReady = true;
           enablePlaceOrder();
         });
         $paymentList.appendChild(label);
