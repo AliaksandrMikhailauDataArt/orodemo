@@ -304,15 +304,15 @@
 
 /* Checkout CTA — Gradient Pill */
 
-.cart__checkout-btn {
+a.cart__checkout-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     width: 100%;
-    padding: 14px 28px;
+    padding: 14px 20px;
     background: linear-gradient(135deg, #0057B8 0%, #00B2E3 100%);
     color: #fff;
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 1px;
@@ -323,9 +323,12 @@
     transition: opacity 0.2s ease, box-shadow 0.2s ease;
     white-space: nowrap;
     margin-top: var(--spacing-small);
+    box-sizing: border-box;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-.cart__checkout-btn:hover {
+a.cart__checkout-btn:hover {
     opacity: 0.9;
     box-shadow: 0 4px 12px rgb(0 87 184 / 30%);
     color: #fff;
