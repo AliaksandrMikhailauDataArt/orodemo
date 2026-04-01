@@ -301,6 +301,21 @@
     text-decoration: underline;
 }
 
+/* Ships */
+
+.block.product-list-page .deal-card__ships {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--color-brand-500, #0071F2);
+    margin-bottom: var(--spacing-xxsmall, 4px);
+}
+
+.block.product-list-page .deal-card__ships svg {
+    flex-shrink: 0;
+}
+
 /* Description clamp */
 
 .block.product-list-page .deal-card__description {

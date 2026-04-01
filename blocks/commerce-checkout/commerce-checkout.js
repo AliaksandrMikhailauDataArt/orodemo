@@ -6,6 +6,7 @@ import {
   patchCheckout,
   validateCheckout,
   placeOrder,
+  clearShoppingList,
   isGuest,
 } from '../../scripts/oro-api.js';
 import {
@@ -329,8 +330,9 @@ export default async function decorate(block) {
 
       hideLoader();
 
-      // Clear checkout cookie after successful order
+      // Clear checkout cookie and shopping list after successful order
       document.cookie = 'oro_checkout_id=; path=/; max-age=0';
+      clearShoppingList().catch((err) => console.warn('Failed to clear shopping list:', err));
 
       // Show order confirmation
       const orderIdentifier = orderResult.identifier || orderResult.orderId;

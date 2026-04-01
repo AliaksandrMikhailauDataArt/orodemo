@@ -66,20 +66,29 @@ export default async function decorate(block) {
     const descText = card.querySelector('.cart__item-description-text');
     const toggleBtn = card.querySelector('.cart__item-view-details');
     if (!toggleBtn) return;
-    if (!descText || !descText.textContent.trim()) {
+
+    const shortDesc = card.dataset.shortDescription || '';
+    const fullDesc = card.dataset.description || '';
+
+    if (!shortDesc.trim() && !fullDesc.trim()) {
       toggleBtn.style.display = 'none';
       return;
     }
-    requestAnimationFrame(() => {
-      if (descText.scrollHeight <= descText.clientHeight) {
-        toggleBtn.style.display = 'none';
-        return;
+
+    if (!fullDesc.trim()) {
+      toggleBtn.style.display = 'none';
+      return;
+    }
+
+    toggleBtn.addEventListener('click', () => {
+      const expanded = descText.classList.toggle('cart__item-description-text--expanded');
+      if (expanded) {
+        descText.innerHTML = fullDesc;
+      } else {
+        descText.innerHTML = shortDesc;
       }
-      toggleBtn.addEventListener('click', () => {
-        const expanded = descText.classList.toggle('cart__item-description-text--expanded');
-        toggleBtn.textContent = expanded ? 'Hide Details' : 'View Details';
-        toggleBtn.setAttribute('aria-expanded', String(expanded));
-      });
+      toggleBtn.textContent = expanded ? 'Hide Details' : 'View Details';
+      toggleBtn.setAttribute('aria-expanded', String(expanded));
     });
   }
 
@@ -107,6 +116,7 @@ export default async function decorate(block) {
       const product = item._product;
       const productName = product?.attributes?.name || 'Product';
       const shortDesc = product?.attributes?.shortDescription || '';
+      const fullDesc = product?.attributes?.description || '';
       const rawLinePrice = item.attributes?.value || 0;
       const itemCurrency = item.attributes?.currencyId || item.attributes?.currency || 'USD';
       const cartCurrency = cartData.currency || 'USD';
@@ -116,6 +126,8 @@ export default async function decorate(block) {
       const itemEl = document.createElement('div');
       itemEl.className = 'cart__item';
       itemEl.dataset.itemId = item.id;
+      itemEl.dataset.shortDescription = shortDesc;
+      itemEl.dataset.description = fullDesc;
 
       // Header row: title (left) + price & remove (right)
       const headerRow = document.createElement('div');

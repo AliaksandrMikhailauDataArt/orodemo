@@ -76,6 +76,21 @@
     color: #000;
 }
 
+.product-details__ships {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 17px;
+    color: var(--color-brand-500, #0071F2);
+    margin-bottom: var(--spacing-xxsmall, 4px);
+}
+
+.product-details__ships svg {
+    width: 21px;
+    height: 21px;
+    flex-shrink: 0;
+}
+
 .product-details__price {
     font-size: 3.2rem;
     font-weight: 800;

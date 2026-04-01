@@ -281,7 +281,7 @@ export async function listProducts({
   const params = {
     page: { number: page, size: pageSize },
     include: 'images,category',
-    fields: { products: 'name,sku,prices,lowPrice,images,category,featured,shortDescription' },
+    fields: { products: 'name,sku,prices,lowPrice,images,category,featured,shortDescription,description,productAttributes' },
   };
 
   if (categoryId) {
@@ -336,7 +336,7 @@ export async function getProduct(productId) {
       _resolved: { images: [], category: null },
     };
   }
-  const fields = 'name,names,sku,shortDescription,description,prices,lowPrice,featured,images,category,unitPrecisions';
+  const fields = 'name,names,sku,shortDescription,description,prices,lowPrice,featured,images,category,unitPrecisions,productAttributes';
   const resp = await oroGet(
     `/api/products/${productId}?include=images,category&fields[products]=${encodeURIComponent(fields)}`,
   );
@@ -501,6 +501,16 @@ export async function removeShoppingListItem(itemId) {
   }
 
   events.emit('oro/cart/item/removed', { itemId });
+  await getDefaultShoppingList();
+}
+
+export async function clearShoppingList(shoppingListId) {
+  const listId = shoppingListId || _defaultListId;
+  if (!listId) return;
+  const resp = await oroDelete(`/api/shoppinglistitems?filter[shoppingList]=${listId}`);
+  if (!resp.ok && resp.status !== 204) {
+    throw new Error('Failed to clear shopping list');
+  }
   await getDefaultShoppingList();
 }
 
