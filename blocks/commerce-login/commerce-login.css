@@ -66,7 +66,7 @@ main .commerce-login-container {
 .oro-login-form__forgot {
     color: var(--color-brand-500);
     font-size: 1.3rem;
-    margin-top: var(--spacing-xsmall);
+    margin-top: var(--spacing-medium);
     display: inline-block;
 }
 

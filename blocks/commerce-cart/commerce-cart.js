@@ -106,7 +106,7 @@ export default async function decorate(block) {
       const productName = product?.attributes?.name || 'Product';
       const shortDesc = product?.attributes?.shortDescription || '';
       const linePrice = item.attributes?.value || 0;
-      const currency = item.attributes?.currency || cartData.currency || 'USD';
+      const currency = item.attributes?.currencyId || item.attributes?.currency || cartData.currency || 'USD';
       const productUrl = rootLink(`/catalog/product?productid=${product?.id || ''}`);
 
       const itemEl = document.createElement('div');
@@ -175,7 +175,7 @@ export default async function decorate(block) {
       return;
     }
 
-    const currency = cartData.currency || 'USD';
+    const currency = cartData.currency || cartData.currencyId || 'USD';
     const checkoutHref = checkoutURL ? rootLink(checkoutURL) : rootLink('/checkout');
 
     const checkoutLabel = placeholders.Global?.Checkout || 'Proceed to Checkout';
@@ -212,7 +212,11 @@ export default async function decorate(block) {
             checkoutBtn.textContent = checkoutLabel;
             return;
           }
-          await createCheckout(shoppingListId);
+          const result = await createCheckout(shoppingListId);
+          const newCheckoutId = result?.data?.id;
+          if (newCheckoutId) {
+            document.cookie = `oro_checkout_id=${newCheckoutId}; path=/; SameSite=Lax`;
+          }
           window.location.href = checkoutHref;
         } catch (err) {
           // eslint-disable-next-line no-console

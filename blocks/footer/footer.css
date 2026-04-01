@@ -6,7 +6,6 @@
 footer {
     background-color: var(--po-navy, #173a87);
     color: var(--po-white, #fff);
-    font-size: 1rem;
     font-weight: 500;
     line-height: 1.62;
     letter-spacing: -0.28px;

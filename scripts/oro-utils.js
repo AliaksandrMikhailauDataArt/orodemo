@@ -155,13 +155,13 @@ export function getProductPrice(product) {
   if (attributes?.lowPrice?.price != null) {
     return {
       price: attributes.lowPrice.price,
-      currency: attributes.lowPrice.currency || 'USD',
+      currency: attributes.lowPrice.currencyId || attributes.lowPrice.currency || 'USD',
     };
   }
   if (attributes?.prices?.length > 0) {
     return {
       price: attributes.prices[0].price,
-      currency: attributes.prices[0].currency || 'USD',
+      currency: attributes.prices[0].currencyId || attributes.prices[0].currency || 'USD',
     };
   }
   return null;

@@ -1,5 +1,9 @@
 /* Product Details — simplified layout */
 
+.product-details {
+    padding-bottom: 50px;
+}
+
 .product-details__alert {
     margin-top: var(--spacing-small);
     margin-bottom: var(--spacing-small);
@@ -29,10 +33,11 @@
 
 .product-details__image {
     width: 100%;
+    min-height: 300px;
     max-height: 400px;
     overflow: hidden;
     border-radius: 8px;
-    background: var(--color-neutral-50);
+    background: var(--color-neutral-200);
     line-height: 0;
 }
 

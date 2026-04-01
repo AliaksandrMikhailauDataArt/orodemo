@@ -276,7 +276,7 @@ header nav .nav-tools .nav-cart-button {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%230071f2' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z'/%3E%3Cline x1='3' y1='6' x2='21' y2='6'/%3E%3Cpath d='M16 10a4 4 0 0 1-8 0'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: center;
-    background-size: 16px;
+    background-size: 20px;
     position: relative;
     width: 48px;
     height: 48px;
@@ -285,7 +285,9 @@ header nav .nav-tools .nav-cart-button {
     border: none;
     cursor: pointer;
     transition: background-color var(--po-transition);
-    display: inline-block;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     text-decoration: none;
     color: var(--po-blue-cta);
     box-sizing: border-box;
@@ -339,7 +341,7 @@ header nav .nav-tools button.nav-search-button {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%230071f2' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: center;
-    background-size: 16px;
+    background-size: 20px;
     width: 48px;
     height: 48px;
     border-radius: 100%;
@@ -362,7 +364,6 @@ header .nav-search-panel input {
     width: 100%;
     padding: 12px 16px;
     box-sizing: border-box;
-    font-size: 0.875rem;
     font-weight: 500;
     border: 1px solid var(--color-neutral-300);
     border-radius: var(--po-pill-radius);
@@ -382,6 +383,7 @@ header .nav-search-panel .dropin-input-container {
 header .nav-search-panel .search-bar-result {
     width: 100%;
     position: relative;
+    margin-top: 8px;
 }
 
 header .nav-search-panel .search-bar-result .product-discovery-product-list__grid {
@@ -417,6 +419,71 @@ header .nav-search-panel .search-bar-result .product-discovery-product-list__foo
 
 header .nav-search-input .search_autocomplete .popover-container {
     width: 100%;
+}
+
+/* ===================================================================
+   Search Autocomplete Dropdown
+   =================================================================== */
+header .nav-search-panel .search-bar-result a.dropin-product-item-card {
+    display: grid;
+    grid-template-columns: 60px 1fr;
+    gap: 12px;
+    align-items: center;
+    padding: 8px;
+    border-radius: 8px;
+    text-decoration: none;
+    color: var(--po-navy);
+    transition: background var(--po-transition);
+    cursor: pointer;
+}
+
+header .nav-search-panel .search-bar-result a.dropin-product-item-card:hover,
+header .nav-search-panel .search-bar-result a.dropin-product-item-card:focus {
+    background: var(--po-light-blue-hover);
+    outline: none;
+    text-decoration: none;
+}
+
+header .nav-search-panel .search-bar-result .dropin-product-item-card__image {
+    width: 60px;
+    height: 60px;
+    overflow: hidden;
+    border-radius: 8px;
+    background: var(--color-neutral-200, #e5e5e5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+header .nav-search-panel .search-bar-result .dropin-product-item-card__image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+header .nav-search-panel .search-bar-result .dropin-product-item-card__content {
+    overflow: hidden;
+}
+
+header .nav-search-panel .search-bar-result .dropin-product-item-card__title {
+    font-weight: 500;
+    line-height: 1.4;
+    color: var(--po-navy);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+header .nav-search-panel .search-bar-result .search-bar-result__footer {
+    padding: 10px 8px;
+    font-weight: 400;
+    line-height: 1.4;
+    color: var(--po-grey);
+    text-align: center;
+    border-top: 1px solid var(--color-neutral-300, #d4d4d4);
+    margin-top: 4px;
 }
 
 /* ===================================================================
@@ -701,7 +768,8 @@ header .nav-search-input .search_autocomplete .popover-container {
 /* ===================================================================
    Sign Out Button
    =================================================================== */
-.signout-wrapper.nav-tools-wrapper .nav-signout-button {
+.signout-wrapper.nav-tools-wrapper .nav-signout-button,
+.signout-wrapper.nav-tools-wrapper .nav-signin-button {
     display: none;
     align-items: center;
     gap: 6px;
@@ -712,19 +780,22 @@ header .nav-search-input .search_autocomplete .popover-container {
     border: 1.5px solid var(--po-blue-cta);
     border-radius: var(--po-pill-radius);
     padding: 8px 16px;
-    font-size: 0.875rem;
     font-weight: 600;
     letter-spacing: -0.28px;
     cursor: pointer;
     white-space: nowrap;
     transition: background var(--po-transition), color var(--po-transition);
+    text-decoration: none;
 }
 
-.signout-wrapper.nav-tools-wrapper .nav-signout-button:hover {
+.signout-wrapper.nav-tools-wrapper .nav-signout-button:hover,
+.signout-wrapper.nav-tools-wrapper .nav-signin-button:hover {
     background-color: var(--po-light-blue-hover);
+    text-decoration: none;
 }
 
-.signout-wrapper.nav-tools-wrapper .nav-signout-button svg {
+.signout-wrapper.nav-tools-wrapper .nav-signout-button svg,
+.signout-wrapper.nav-tools-wrapper .nav-signin-button svg {
     flex-shrink: 0;
 }
 
@@ -919,8 +990,9 @@ header .nav-search-input .search_autocomplete .popover-container {
         display: none;
     }
 
-    /* Sign-out: icon-only circle to match cart/search buttons */
-    .signout-wrapper.nav-tools-wrapper .nav-signout-button {
+    /* Sign-out/sign-in: icon-only circle to match cart/search buttons */
+    .signout-wrapper.nav-tools-wrapper .nav-signout-button,
+    .signout-wrapper.nav-tools-wrapper .nav-signin-button {
         padding: 0;
         width: 48px;
         height: 48px;
@@ -928,7 +1000,8 @@ header .nav-search-input .search_autocomplete .popover-container {
         justify-content: center;
     }
 
-    .signout-wrapper.nav-tools-wrapper .nav-signout-button span {
+    .signout-wrapper.nav-tools-wrapper .nav-signout-button span,
+    .signout-wrapper.nav-tools-wrapper .nav-signin-button span {
         display: none;
     }
 }

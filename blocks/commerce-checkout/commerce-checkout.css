@@ -56,7 +56,6 @@
     margin: 0;
     height: 0;
     border: none;
-    border-bottom: 1px solid var(--color-neutral-200);
 }
 
 /* Divider in order summary (placed before higher-specificity divider rules) */
@@ -65,7 +64,6 @@
     margin: var(--spacing-xsmall) 0;
     height: 0;
     border: none;
-    border-bottom: 1px solid var(--color-neutral-200);
 }
 
 /* Section Titles Inside Cards */
@@ -81,7 +79,6 @@
     color: #000;
     margin: 0 0 var(--spacing-small);
     padding-bottom: var(--spacing-small);
-    border-bottom: 1px solid var(--color-neutral-200);
 }
 
 .checkout__shipping-form .dropin-header-container .dropin-divider,
@@ -304,8 +301,6 @@
     font-weight: 700;
     color: #000;
     margin: 0 0 var(--spacing-small);
-    padding-bottom: var(--spacing-small);
-    border-bottom: 1px solid var(--color-neutral-200);
 }
 
 .order-summary__line {
@@ -332,7 +327,6 @@
 
 .cart-cart-summary-list__heading {
     padding-bottom: var(--spacing-small);
-    border-bottom: 1px solid var(--color-neutral-200);
 }
 
 .cart-cart-summary-list__heading-text {

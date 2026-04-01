@@ -414,7 +414,7 @@ export async function getDefaultShoppingList() {
     items,
     totalQuantity,
     subtotal: defaultList.attributes?.subTotal || defaultList.attributes?.total || 0,
-    currency: defaultList.attributes?.currency || 'USD',
+    currency: defaultList.attributes?.currencyId || defaultList.attributes?.currency || 'USD',
   };
 
   events.emit('oro/cart/data', payload);
@@ -628,5 +628,16 @@ export async function listOrders({ page = 1, pageSize = 10 } = {}) {
     page: { number: page, size: pageSize },
   });
   const resp = await oroGet(`/api/orders?${qs}`);
+  return resp.json();
+}
+
+export async function getRegions(countryCode) {
+  const resp = await oroGet(`/api/countries/${countryCode}/regions?page[size]=10000`);
+  return resp.json();
+}
+
+export async function autocomplete(search) {
+  const encoded = encodeURIComponent(search);
+  const resp = await oroGet(`/api/autocomplete?search=${encoded}`);
   return resp.json();
 }

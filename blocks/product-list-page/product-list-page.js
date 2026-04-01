@@ -279,17 +279,18 @@ export default async function decorate(block) {
       if (imageUrl) {
         const link = document.createElement('a');
         link.href = productUrl;
+        imageDiv.appendChild(link);
         const img = document.createElement('img');
         img.alt = name;
         img.loading = 'lazy';
         img.width = 300;
         img.height = 200;
-        link.appendChild(img);
-        imageDiv.appendChild(link);
         fetchImageAsObjectUrl(imageUrl).then((blobUrl) => {
           img.src = blobUrl;
+          link.appendChild(img);
         }).catch(() => {
           img.src = imageUrl;
+          link.appendChild(img);
         });
       } else {
         imageDiv.innerHTML = `<a href="${productUrl}"><div class="deal-card__image-placeholder"></div></a>`;
@@ -326,7 +327,7 @@ export default async function decorate(block) {
         const rounded = Math.round(priceData.price);
         priceSpan.textContent = new Intl.NumberFormat('en-US', {
           style: 'currency',
-          currency: priceData.currency || 'USD',
+          currency: priceData.currency,
           minimumFractionDigits: 0,
           maximumFractionDigits: 0,
         }).format(rounded);

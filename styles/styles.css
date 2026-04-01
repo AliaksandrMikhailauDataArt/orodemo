@@ -406,7 +406,7 @@ main img {
 
 /* sections */
 main > .section {
-  margin: var(--spacing-xbig) 0;
+  margin: var(--spacing-xbig) 0 0 0;
 }
 
 main > .section > div {

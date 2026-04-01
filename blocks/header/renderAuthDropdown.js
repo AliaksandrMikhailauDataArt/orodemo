@@ -28,12 +28,24 @@ export function renderAuthButton(navTools) {
         </svg>
         <span>Sign out</span>
       </button>
+      <a href="${rootLink('/')}" class="nav-signin-button">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <g stroke="currentColor" stroke-width="1.5">
+            <circle cx="12" cy="6" r="4"></circle>
+            <path d="M20 17.5c0 2.485 0 4.5-8 4.5s-8-2.015-8-4.5S7.582 13 12 13s8 2.015 8 4.5Z"></path>
+          </g>
+        </svg>
+        <span>Sign in</span>
+      </a>
     </div>
   `);
 
   navTools.append(buttonElement);
 
   const signoutButton = navTools.querySelector('.nav-signout-button');
+  const signinButton = navTools.querySelector('.nav-signin-button');
+  const cartWrapper = navTools.querySelector('.minicart-wrapper');
+  const searchWrapper = navTools.querySelector('.search-wrapper');
 
   signoutButton.addEventListener('click', async () => {
     await logout();
@@ -46,6 +58,9 @@ export function renderAuthButton(navTools) {
   const updateUI = (authState) => {
     const isAuthenticated = authState ? !authState.isGuest : checkIsAuthenticated();
     signoutButton.style.display = isAuthenticated ? 'inline-flex' : 'none';
+    signinButton.style.display = isAuthenticated ? 'none' : 'inline-flex';
+    if (cartWrapper) cartWrapper.style.display = isAuthenticated ? '' : 'none';
+    if (searchWrapper) searchWrapper.style.display = isAuthenticated ? '' : 'none';
   };
 
   events.on('oro/authenticated', (authState) => {

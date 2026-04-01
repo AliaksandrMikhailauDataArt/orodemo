@@ -242,10 +242,13 @@
 
 .block.product-list-page .deal-card__image {
     width: 100%;
+    min-height: 150px;
     max-height: 200px;
     overflow: hidden;
     padding: var(--spacing-small);
     line-height: 0;
+    background: var(--color-neutral-200);
+    border-radius: 4px;
 }
 
 .block.product-list-page .deal-card__image a {

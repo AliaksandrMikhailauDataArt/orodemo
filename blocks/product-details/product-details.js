@@ -93,11 +93,12 @@ async function loadProduct(productId, labels, els) {
     img.width = 600;
     img.height = 600;
     img.loading = 'eager';
-    $image.appendChild(img);
     fetchImageAsObjectUrl(imageUrl).then((blobUrl) => {
       img.src = blobUrl;
+      $image.appendChild(img);
     }).catch(() => {
       img.src = imageUrl;
+      $image.appendChild(img);
     });
   } else {
     $image.innerHTML = '<div class="product-details__image-placeholder">No image available</div>';
@@ -111,7 +112,7 @@ async function loadProduct(productId, labels, els) {
     const rounded = Math.round(priceData.price);
     $price.textContent = new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: priceData.currency || 'USD',
+      currency: priceData.currency,
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(rounded);

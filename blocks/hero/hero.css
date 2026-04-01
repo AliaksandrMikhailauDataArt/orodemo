@@ -9,12 +9,21 @@
   min-height: 300px;
 }
 
-.hero h1 {
+.hero h1,
+.hero h2,
+.hero h3,
+.hero h4,
+.hero h5,
+.hero h6,
+.hero p,
+.hero a,
+.hero li,
+.hero span {
   max-width: 1200px;
   margin-left: auto;
   margin-right: auto;
   color: var(--color-neutral-50);
-  text-shadow: 0 2px 4px rgb(0 0 0 / 30%);
+  text-shadow: 0 4px 8px rgb(0 0 0 / 50%), 0 2px 4px rgb(0 0 0 / 40%), 0 0 20px rgb(0 0 0 / 30%);
 }
 
 .hero picture {

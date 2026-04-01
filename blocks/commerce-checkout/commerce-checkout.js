@@ -1,5 +1,6 @@
 import {
-  getCheckouts,
+  getCheckout,
+  getDefaultShoppingList,
   getAvailableAddresses,
   getShippingMethods,
   getPaymentMethods,
@@ -8,8 +9,9 @@ import {
   placeOrder,
   getOrder,
   isGuest,
+  getRegions,
 } from '../../scripts/oro-api.js';
-import { formatPrice } from '../../scripts/oro-utils.js';
+import { formatPrice, getProductPrice } from '../../scripts/oro-utils.js';
 import {
   fetchPlaceholders,
   rootLink,
@@ -124,40 +126,87 @@ export default async function decorate(block) {
     );
   }
 
-  // --- Step 1: Load existing checkout (non-blocking after skeleton) ---
-  getCheckouts().then(({ checkouts }) => {
-    if (!checkouts || checkouts.length === 0) {
-      block.querySelector('.checkout__content')
-        .classList.add('checkout__content--empty');
-      block.querySelector('.checkout__main').innerHTML = `
-        <div class="checkout__empty-cart">
-          <p>No active checkout found.</p>
-          <a href="${rootLink('/')}"
-            class="dropin-button dropin-button--primary">
-            Continue Shopping
-          </a>
-        </div>`;
-      return;
-    }
+  // --- Helper: Read checkout ID from session cookie ---
+  function getCheckoutIdFromCookie() {
+    const match = document.cookie.match(/(?:^|;\s*)oro_checkout_id=([^;]+)/);
+    return match ? match[1] : null;
+  }
 
-    [checkoutData] = checkouts;
-    checkoutId = checkoutData.id;
+  // --- Step 1: Load checkout by ID from session cookie ---
+  const cookieCheckoutId = getCheckoutIdFromCookie();
 
-    // Render order summary as soon as checkout data arrives
-    renderOrderSummary(checkoutData, $orderSummary, $cartSummary);
+  if (!cookieCheckoutId) {
+    block.querySelector('.checkout__content')
+      .classList.add('checkout__content--empty');
+    block.querySelector('.checkout__main').innerHTML = `
+      <div class="checkout__empty-cart">
+        <p>No active checkout found.</p>
+        <a href="${rootLink('/')}"
+          class="dropin-button dropin-button--primary">
+          Continue Shopping
+        </a>
+      </div>`;
+  } else {
+    Promise.all([
+      getCheckout(cookieCheckoutId),
+      getDefaultShoppingList(),
+    ]).then(([{ checkout }, shoppingList]) => {
+      if (!checkout) {
+        block.querySelector('.checkout__content')
+          .classList.add('checkout__content--empty');
+        block.querySelector('.checkout__main').innerHTML = `
+          <div class="checkout__empty-cart">
+            <p>No active checkout found.</p>
+            <a href="${rootLink('/')}"
+              class="dropin-button dropin-button--primary">
+              Continue Shopping
+            </a>
+          </div>`;
+        return;
+      }
 
-    // Fire parallel fetches — each populates its own section
-    loadBillingAddresses();
-    loadShippingMethods();
-    loadPaymentMethods();
-  }).catch((err) => {
-    // eslint-disable-next-line no-console
-    console.error('Checkout init failed:', err);
-    showError(err.message || 'Failed to load checkout.');
-    $shippingForm.innerHTML = '';
-    $paymentMethods.innerHTML = '';
-    $orderSummary.innerHTML = '';
-  });
+      checkoutData = checkout;
+      checkoutId = checkoutData.id;
+
+      // If checkout is already completed, show "all done" screen
+      const status = checkoutData.attributes?.completed
+        || checkoutData.attributes?.state === 'completed';
+      if (status) {
+        document.cookie = 'oro_checkout_id=; path=/; max-age=0';
+        block.innerHTML = `
+          <div class="checkout__wrapper">
+            <div class="checkout__content">
+              <div class="checkout__main">
+                <div class="checkout__empty-cart">
+                  <h2>You are all done!</h2>
+                  <p>Your order has been placed successfully.</p>
+                  <a href="${rootLink('/')}"
+                    class="dropin-button dropin-button--primary">
+                    Go Shopping
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>`;
+        return;
+      }
+
+      // Render order summary using checkout totals + shopping list items for line details
+      renderOrderSummary(checkoutData, shoppingList, $orderSummary, $cartSummary);
+
+      // Fire parallel fetches — each populates its own section
+      loadBillingAddresses();
+      loadShippingMethods();
+      loadPaymentMethods();
+    }).catch((err) => {
+      // eslint-disable-next-line no-console
+      console.error('Checkout init failed:', err);
+      showError(err.message || 'Failed to load checkout.');
+      $shippingForm.innerHTML = '';
+      $paymentMethods.innerHTML = '';
+      $orderSummary.innerHTML = '';
+    });
+  }
 
   // --- Load billing addresses independently ---
   async function loadBillingAddresses() {
@@ -293,8 +342,6 @@ export default async function decorate(block) {
 
       // Single PATCH with all checkout data
       await updateCheckout(checkoutId, {
-        billingAddress,
-        shipToBillingAddress: true,
         shippingMethod: selectedShippingMethod,
         shippingMethodType: selectedShippingMethodType,
         paymentMethod: selectedPaymentMethod,
@@ -320,6 +367,9 @@ export default async function decorate(block) {
 
       hideLoader();
 
+      // Clear checkout cookie after successful order
+      document.cookie = 'oro_checkout_id=; path=/; max-age=0';
+
       // Show order confirmation
       await displayOrderConfirmation(orderResult.orderId);
     } catch (err) {
@@ -340,6 +390,7 @@ export default async function decorate(block) {
     try {
       const order = await getOrder(orderId);
       const orderAttrs = order.attributes || {};
+      const orderCurrency = orderCurrencyId || orderCurrency || 'USD';
       const lineItems = (order._resolved?.lineItems || [])
         .map((li) => li.attributes);
 
@@ -371,15 +422,15 @@ export default async function decorate(block) {
                 <h3>Order Total</h3>
                 <div class="order-summary__line">
                   <span>Subtotal</span>
-                  <span>${formatPrice(orderAttrs.subtotalValue, orderAttrs.currency)}</span>
+                  <span>${formatPrice(orderAttrs.subtotalValue, orderCurrency)}</span>
                 </div>
                 <div class="order-summary__line">
                   <span>Shipping</span>
-                  <span>${formatPrice(orderAttrs.shippingCostAmount, orderAttrs.currency)}</span>
+                  <span>${formatPrice(orderAttrs.shippingCostAmount, orderCurrency)}</span>
                 </div>
                 <div class="order-summary__line order-summary__total">
                   <span><strong>Total</strong></span>
-                  <span><strong>${formatPrice(orderAttrs.total, orderAttrs.currency)}</strong></span>
+                  <span><strong>${formatPrice(orderAttrs.total, orderCurrency)}</strong></span>
                 </div>
               </div>
             </div>
@@ -392,7 +443,7 @@ export default async function decorate(block) {
                     <span>Qty: ${li.quantity}</span>
                     <span>${formatPrice(
     li.rowTotalValue || li.price,
-    li.currency || orderAttrs.currency,
+    li.currencyId || li.currency || orderCurrency,
   )}</span>
                   </div>
                 `).join('')}
@@ -429,8 +480,22 @@ export default async function decorate(block) {
   }
 }
 
+// --- Country/Region constants ---
+const COUNTRIES = [
+  { code: 'US', name: 'United States' },
+  { code: 'GB', name: 'United Kingdom' },
+  { code: 'CA', name: 'Canada' },
+  { code: 'AU', name: 'Australia' },
+];
+
+const DEFAULT_COUNTRY = 'US';
+
 // --- Helper: Build address form HTML ---
 function buildAddressFormHTML() {
+  const countryOptions = COUNTRIES.map(
+    (c) => `<option value="${c.code}"${c.code === DEFAULT_COUNTRY ? ' selected' : ''}>${c.name}</option>`,
+  ).join('');
+
   return `
     <form name="billingAddress" class="checkout__address-form">
       <div class="form-row">
@@ -442,15 +507,60 @@ function buildAddressFormHTML() {
       <label>Apt / Suite<input type="text" name="street2" /></label>
       <div class="form-row">
         <label>City *<input type="text" name="city" required /></label>
-        <label>Region *<input type="text" name="region" required placeholder="e.g. US-CA" /></label>
+        <label>Region *
+          <select name="region" required>
+            <option value="">Loading...</option>
+          </select>
+        </label>
       </div>
       <div class="form-row">
         <label>Postal Code *<input type="text" name="postalCode" required /></label>
-        <label>Country *<input type="text" name="country" required value="US" /></label>
+        <label>Country *
+          <select name="country" required>
+            ${countryOptions}
+          </select>
+        </label>
       </div>
       <label>Phone<input type="tel" name="phone" /></label>
     </form>
   `;
+}
+
+// --- Helper: Load regions into a select element ---
+async function loadRegions(form) {
+  const countrySelect = form.querySelector('select[name="country"]');
+  const regionSelect = form.querySelector('select[name="region"]');
+  if (!countrySelect || !regionSelect) return;
+
+  const countryCode = countrySelect.value;
+  regionSelect.innerHTML = '<option value="">Loading...</option>';
+  regionSelect.disabled = true;
+
+  try {
+    const regions = await getRegions(countryCode);
+    const list = regions.data || [];
+
+    if (list.length === 0) {
+      regionSelect.innerHTML = '<option value="">No regions available</option>';
+    } else {
+      regionSelect.innerHTML = `<option value="">Select a region</option>${list.map(
+        (r) => `<option value="${r.id}">${r.attributes.name}</option>`,
+      ).join('')}`;
+    }
+  } catch (_) {
+    regionSelect.innerHTML = '<option value="">Failed to load regions</option>';
+  }
+  regionSelect.disabled = false;
+}
+
+// --- Helper: Initialize address form (country change listener + initial regions) ---
+function initAddressForm(form) {
+  if (!form) return;
+  const countrySelect = form.querySelector('select[name="country"]');
+  if (!countrySelect) return;
+
+  countrySelect.addEventListener('change', () => loadRegions(form));
+  loadRegions(form);
 }
 
 // --- Helper: Render address selector with saved addresses ---
@@ -497,9 +607,14 @@ function renderAddressSelector(container, addresses) {
   formWrapper.innerHTML = buildAddressFormHTML();
   container.appendChild(formWrapper);
 
-  // Toggle form visibility
+  // Toggle form visibility and init form when shown
   $selector.addEventListener('change', (e) => {
-    formWrapper.hidden = e.target.value !== 'new';
+    const isNew = e.target.value === 'new';
+    formWrapper.hidden = !isNew;
+    if (isNew && !formWrapper.dataset.initialized) {
+      initAddressForm(formWrapper.querySelector('form'));
+      formWrapper.dataset.initialized = 'true';
+    }
   });
 }
 
@@ -511,6 +626,7 @@ function renderManualAddressForm(container) {
     </div>
     ${buildAddressFormHTML()}
   `;
+  initAddressForm(container.querySelector('form'));
 }
 
 // --- Helper: Get address from form ---
@@ -531,9 +647,9 @@ function getAddressFromForm(form) {
 }
 
 // --- Helper: Render order summary sidebar ---
-function renderOrderSummary(checkout, $orderSummary, $cartSummary) {
+function renderOrderSummary(checkout, shoppingList, $orderSummary, $cartSummary) {
   const attrs = checkout?.attributes || {};
-  const currency = attrs.currency || 'USD';
+  const currency = attrs.currencyId || attrs.currency || 'USD';
 
   const subtotalEntry = (attrs.totals || [])
     .find((t) => t.subtotalType === 'subtotal');
@@ -557,23 +673,26 @@ function renderOrderSummary(checkout, $orderSummary, $cartSummary) {
     </div>
   `;
 
-  // Cart summary — line items
-  const lineItems = checkout?._resolved?.lineItems || [];
-  if (lineItems.length > 0) {
+  // Cart summary — use shopping list items for full product details
+  const items = shoppingList?.items || [];
+  if (items.length > 0) {
     $cartSummary.innerHTML = `
       <div class="cart-cart-summary-list">
         <div class="cart-cart-summary-list__heading">
-          <span class="cart-cart-summary-list__heading-text">Items (${lineItems.length})</span>
+          <span class="cart-cart-summary-list__heading-text">Items (${items.length})</span>
         </div>
-        ${lineItems.map((li) => {
-    const liAttrs = li.attributes || {};
+        ${items.map((item) => {
+    const product = item._product;
+    const productName = product?.attributes?.name
+      || product?.attributes?.sku
+      || 'Item';
+    const quantity = item.attributes?.quantity || 1;
+    const priceInfo = product ? getProductPrice(product) : null;
+    const lineTotal = priceInfo ? priceInfo.price * quantity : 0;
+    const lineCurrency = priceInfo?.currency || currency;
     return `<div class="checkout__line-item">
-            <span>${liAttrs.productName || 'Item'}</span>
-            <span>Qty: ${liAttrs.quantity || 1}</span>
-            <span>${formatPrice(
-    liAttrs.subtotal || liAttrs.price || 0,
-    liAttrs.currency || currency,
-  )}</span>
+            <span>${productName}</span>
+            <span>${formatPrice(lineTotal, lineCurrency)}</span>
           </div>`;
   }).join('')}
       </div>

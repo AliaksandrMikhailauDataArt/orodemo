@@ -2,6 +2,8 @@ import { events } from '../../scripts/oro-events.js';
 import { getMetadata } from '../../scripts/aem.js';
 import { loadFragment } from '../fragment/fragment.js';
 import { fetchPlaceholders, rootLink } from '../../scripts/commerce.js';
+import { autocomplete, getConfig } from '../../scripts/oro-api.js';
+import { resolveImageUrl, fetchImageAsObjectUrl } from '../../scripts/oro-utils.js';
 
 import renderAuthCombine from './renderAuthCombine.js';
 import { renderAuthButton } from './renderAuthDropdown.js';
@@ -149,6 +151,14 @@ function setupSubmenu(navSection) {
   }
 }
 
+function debounce(fn, delay) {
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), delay);
+  };
+}
+
 /**
  * loads and decorates the header, mainly the nav
  * @param {Element} block The header block element
@@ -258,17 +268,164 @@ export default async function decorate(block) {
   const searchButton = navTools.querySelector('.nav-search-button');
   const searchForm = searchPanel.querySelector('#search-bar-form');
 
+  // --- Autocomplete dropdown ---
+  const autocompleteDropdown = document.createElement('div');
+  autocompleteDropdown.className = 'search-bar-result';
+  autocompleteDropdown.setAttribute('role', 'listbox');
+  autocompleteDropdown.setAttribute('aria-label', 'Search suggestions');
+  autocompleteDropdown.hidden = true;
+  searchForm.appendChild(autocompleteDropdown);
+
+  const searchInput = searchForm.querySelector('input[type="search"]');
+  const baseUrl = getConfig()?.baseUrl || '';
+
+  function clearAutocomplete() {
+    autocompleteDropdown.hidden = true;
+    autocompleteDropdown.innerHTML = '';
+  }
+
+  function renderAutocompleteResults(data) {
+    autocompleteDropdown.innerHTML = '';
+
+    if (!data || !data.products || data.products.length === 0) {
+      autocompleteDropdown.hidden = true;
+      return;
+    }
+
+    const products = data.products.slice(0, 5);
+
+    products.forEach((product) => {
+      const card = document.createElement('a');
+      card.href = rootLink(`/catalog/product?productid=${product.id}`);
+      card.className = 'dropin-product-item-card';
+      card.setAttribute('role', 'option');
+
+      const imgWrap = document.createElement('div');
+      imgWrap.className = 'dropin-product-item-card__image';
+      const img = document.createElement('img');
+      img.alt = product.name || '';
+      img.loading = 'lazy';
+      img.width = 60;
+      img.height = 60;
+      img.hidden = true;
+      imgWrap.appendChild(img);
+
+      const rawImageUrl = product.imageWebp || product.image || '';
+      const imageUrl = resolveImageUrl(rawImageUrl, baseUrl);
+      if (imageUrl) {
+        fetchImageAsObjectUrl(imageUrl).then((blobUrl) => {
+          img.src = blobUrl;
+          img.hidden = false;
+        }).catch(() => {
+          img.src = imageUrl;
+          img.hidden = false;
+        });
+      }
+
+      const titleWrap = document.createElement('div');
+      titleWrap.className = 'dropin-product-item-card__content';
+      const title = document.createElement('span');
+      title.className = 'dropin-product-item-card__title';
+      title.textContent = product.name || '';
+      titleWrap.appendChild(title);
+
+      card.append(imgWrap, titleWrap);
+      autocompleteDropdown.appendChild(card);
+    });
+
+    if (data.total_count != null) {
+      const footer = document.createElement('div');
+      footer.className = 'search-bar-result__footer';
+      footer.setAttribute('role', 'status');
+      footer.setAttribute('aria-live', 'polite');
+      const count = Number(data.total_count);
+      footer.textContent = `${count} result${count !== 1 ? 's' : ''} found`;
+      autocompleteDropdown.appendChild(footer);
+    }
+
+    autocompleteDropdown.hidden = false;
+  }
+
+  let currentRequestId = 0;
+
+  const handleSearchInput = debounce(async () => {
+    const query = searchInput.value.trim();
+
+    if (query.length < 2) {
+      clearAutocomplete();
+      return;
+    }
+
+    currentRequestId += 1;
+    const thisRequestId = currentRequestId;
+
+    try {
+      const data = await autocomplete(query);
+      if (thisRequestId === currentRequestId) {
+        renderAutocompleteResults(data);
+      }
+    } catch (_err) {
+      if (thisRequestId === currentRequestId) {
+        clearAutocomplete();
+      }
+    }
+  }, 300);
+
+  searchInput.addEventListener('input', handleSearchInput);
+
+  // Keyboard navigation for autocomplete
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      clearAutocomplete();
+      return;
+    }
+
+    const items = autocompleteDropdown.querySelectorAll('a.dropin-product-item-card');
+    if (!items.length || autocompleteDropdown.hidden) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      items[0]?.focus();
+    }
+  });
+
+  autocompleteDropdown.addEventListener('keydown', (e) => {
+    const items = [...autocompleteDropdown.querySelectorAll('a.dropin-product-item-card')];
+    const idx = items.indexOf(document.activeElement);
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const next = items[idx + 1];
+      if (next) next.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (idx <= 0) {
+        searchInput.focus();
+      } else {
+        items[idx - 1].focus();
+      }
+    } else if (e.key === 'Escape') {
+      clearAutocomplete();
+      searchInput.focus();
+    }
+  });
+
   searchForm.addEventListener('submit', (e) => {
     e.preventDefault();
     const query = searchForm.search.value.trim();
     if (query.length) {
+      clearAutocomplete();
       window.location.href = `${rootLink('/search')}?q=${encodeURIComponent(query)}`;
     }
   });
 
   function toggleSearch(state) {
     togglePanel(searchPanel, state);
-    if (state) searchForm.querySelector('input')?.focus();
+    if (state) {
+      searchInput.focus();
+    } else {
+      clearAutocomplete();
+    }
   }
 
   searchButton.addEventListener('click', () => toggleSearch(!searchPanel.classList.contains('nav-tools-panel--show')));
