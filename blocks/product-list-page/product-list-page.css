@@ -433,6 +433,7 @@
     display: flex;
     gap: var(--spacing-xsmall);
     justify-content: center;
+    align-items: center;
 }
 
 .block.product-list-page .search__page-btn {

@@ -146,8 +146,8 @@ export default async function decorate(block) {
   // Sort By accordion
   const sortItems = [
     { value: '', label: 'Recommended' },
-    { value: 'minimalPrice', label: 'Price Low to High' },
-    { value: '-minimalPrice', label: 'Price High to Low' },
+    { value: 'id', label: 'Price Low to High' },
+    { value: '-id', label: 'Price High to Low' },
   ];
   const sortOptions = document.createElement('div');
   sortOptions.className = 'filter-panel__options';
@@ -285,6 +285,7 @@ export default async function decorate(block) {
         img.loading = 'lazy';
         img.width = 300;
         img.height = 200;
+        img.onload = () => { imageDiv.style.background = 'none'; };
         fetchImageAsObjectUrl(imageUrl).then((blobUrl) => {
           img.src = blobUrl;
           link.appendChild(img);
