@@ -385,7 +385,7 @@ export async function getDefaultShoppingList() {
   if (!defaultList) {
     _defaultListId = null;
     const payload = {
-      id: null, items: [], totalQuantity: 0, subtotal: 0, currency: 'USD',
+      id: null, items: [], totalQuantity: 0, subtotal: 0, total: 0, currency: 'USD',
     };
     events.emit('oro/cart/data', payload);
     return payload;
@@ -413,7 +413,9 @@ export async function getDefaultShoppingList() {
     name: defaultList.attributes?.name,
     items,
     totalQuantity,
-    subtotal: defaultList.attributes?.subTotal || defaultList.attributes?.total || 0,
+    subtotal: defaultList.attributes?.subTotal || 0,
+    discount: defaultList.attributes?.discount || 0,
+    total: defaultList.attributes?.total || 0,
     currency: defaultList.attributes?.currencyId || defaultList.attributes?.currency || 'USD',
   };
 
@@ -572,6 +574,15 @@ export async function updateCheckout(checkoutId, attributes) {
   return resp.json();
 }
 
+export async function patchCheckout(checkoutId, body) {
+  const resp = await oroPatch(`/api/checkouts/${checkoutId}`, body);
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.errors?.[0]?.detail || 'Failed to update checkout');
+  }
+  return resp.json();
+}
+
 export async function getShippingMethods(checkoutId) {
   const resp = await oroGet(`/api/checkouts/${checkoutId}/availableShippingMethods`);
   return resp.json();
@@ -609,8 +620,9 @@ export async function placeOrder(paymentUrl) {
     throw new Error(err.errors?.[0]?.detail || 'Failed to place order');
   }
   const json = await resp.json();
-  const orderId = json.data?.relationships?.order?.data?.id;
-  return { orderId, data: json };
+  const orderId = json.data?.id;
+  const identifier = json.data?.attributes?.identifier || orderId;
+  return { orderId, identifier, data: json };
 }
 
 // --- Orders ---

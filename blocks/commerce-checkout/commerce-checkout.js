@@ -2,22 +2,20 @@ import {
   getCheckout,
   getDefaultShoppingList,
   getAvailableAddresses,
-  getShippingMethods,
   getPaymentMethods,
-  updateCheckout,
+  patchCheckout,
   validateCheckout,
   placeOrder,
-  getOrder,
   isGuest,
-  getRegions,
 } from '../../scripts/oro-api.js';
-import { formatPrice, getProductPrice } from '../../scripts/oro-utils.js';
+import {
+  formatPrice, formatPriceSmart, getProductPrice, convertCurrency,
+} from '../../scripts/oro-utils.js';
 import {
   fetchPlaceholders,
   rootLink,
   checkIsAuthenticated,
   CUSTOMER_LOGIN_PATH,
-  SUPPORT_PATH,
 } from '../../scripts/commerce.js';
 
 const SPINNER_HTML = '<div class="checkout__loading"><div class="checkout__spinner"></div></div>';
@@ -49,11 +47,9 @@ export default async function decorate(block) {
             <div class="dropin-divider"></div>
           </div>
           <div class="checkout__server-error checkout__block" hidden></div>
-          <div class="checkout__shipping-form checkout__block">
-            ${SPINNER_HTML}
-          </div>
-          <div class="checkout__bill-to-shipping checkout__block"></div>
-          <div class="checkout__delivery checkout__block"></div>
+          <div class="checkout__shipping-form checkout__block" hidden></div>
+          <div class="checkout__bill-to-shipping checkout__block" hidden></div>
+          <div class="checkout__delivery checkout__block" hidden></div>
           <div class="checkout__payment-methods checkout__block">
             ${SPINNER_HTML}
           </div>
@@ -80,12 +76,8 @@ export default async function decorate(block) {
 
   let checkoutId = null;
   let checkoutData = null;
-  let selectedShippingMethod = null;
-  let selectedShippingMethodType = null;
   let selectedPaymentMethod = null;
-  let availableBillingAddresses = [];
-  let shippingReady = false;
-  let addressReady = false;
+  let savedAddressId = null;
 
   // Full-page loader only used for place-order action
   function showLoader() { $loader.hidden = false; }
@@ -114,16 +106,13 @@ export default async function decorate(block) {
   const extraFields = document.createElement('div');
   extraFields.className = 'checkout__extra-fields';
   extraFields.innerHTML = `
-    <label>PO Number (optional)<input type="text" name="poNumber" /></label>
     <label>Order Notes (optional)<textarea name="customerNotes" rows="3"></textarea></label>
   `;
   $placeOrder.appendChild(extraFields);
   $placeOrder.appendChild(placeOrderBtn);
 
   function enablePlaceOrder() {
-    placeOrderBtn.disabled = !(
-      selectedPaymentMethod && shippingReady && addressReady
-    );
+    placeOrderBtn.disabled = !(selectedPaymentMethod && savedAddressId);
   }
 
   // --- Helper: Read checkout ID from session cookie ---
@@ -195,8 +184,7 @@ export default async function decorate(block) {
       renderOrderSummary(checkoutData, shoppingList, $orderSummary, $cartSummary);
 
       // Fire parallel fetches — each populates its own section
-      loadBillingAddresses();
-      loadShippingMethods();
+      loadAvailableShippingAddresses();
       loadPaymentMethods();
     }).catch((err) => {
       // eslint-disable-next-line no-console
@@ -208,59 +196,18 @@ export default async function decorate(block) {
     });
   }
 
-  // --- Load billing addresses independently ---
-  async function loadBillingAddresses() {
+  // --- Load available shipping addresses and pick first as billing ---
+  async function loadAvailableShippingAddresses() {
     try {
-      const billingResp = await getAvailableAddresses(checkoutId, 'billing');
-      availableBillingAddresses = Array.isArray(billingResp)
-        ? billingResp
-        : (billingResp.data || []);
-
-      if (availableBillingAddresses.length > 0) {
-        renderAddressSelector($shippingForm, availableBillingAddresses);
-      } else {
-        renderManualAddressForm($shippingForm);
+      const resp = await getAvailableAddresses(checkoutId, 'shipping');
+      const addresses = Array.isArray(resp) ? resp : (resp.data || []);
+      if (addresses.length > 0) {
+        savedAddressId = addresses[0].relationships?.address?.data?.id;
       }
-      addressReady = true;
       enablePlaceOrder();
     } catch (err) {
       // eslint-disable-next-line no-console
-      console.error('Failed to load billing addresses:', err);
-      // Fall back to manual form
-      renderManualAddressForm($shippingForm);
-      addressReady = true;
-      enablePlaceOrder();
-    }
-  }
-
-  // --- Load shipping methods independently (auto-select, hidden) ---
-  async function loadShippingMethods() {
-    try {
-      const shippingResp = await getShippingMethods(checkoutId);
-      const shippingMethods = Array.isArray(shippingResp)
-        ? shippingResp
-        : (shippingResp.data || []);
-
-      if (shippingMethods.length === 0) {
-        showError(
-          'No shipping methods are available for this order.'
-          + ' Please contact support.',
-        );
-        block.querySelector('.checkout__content')
-          .classList.add('checkout__content--error');
-        return;
-      }
-
-      const firstShipping = shippingMethods[0];
-      const firstType = firstShipping.attributes?.types?.[0];
-      selectedShippingMethod = firstShipping.id;
-      selectedShippingMethodType = firstType?.id || 'primary';
-      shippingReady = true;
-      enablePlaceOrder();
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to load shipping methods:', err);
-      showError('Failed to load shipping methods. Please try again.');
+      console.error('Failed to load shipping addresses:', err);
     }
   }
 
@@ -297,7 +244,7 @@ export default async function decorate(block) {
         label.innerHTML = `
           <input type="radio" name="paymentMethod"
             value="${method.id}" />
-          ${method.attributes?.label || method.id}
+          ${[method.attributes?.options?.paymentTerm, method.attributes?.label].filter(Boolean).join(' ') || method.id}
         `;
         label.querySelector('input').addEventListener('change', () => {
           selectedPaymentMethod = method.id;
@@ -320,50 +267,65 @@ export default async function decorate(block) {
     showLoader();
 
     try {
-      // Determine billing address
-      const selectedRadio = $shippingForm
-        .querySelector('input[name="billingAddressSelection"]:checked');
-      let billingAddress;
-
-      if (!selectedRadio || selectedRadio.value === 'new') {
-        const form = $shippingForm.querySelector('form');
-        billingAddress = getAddressFromForm(form);
-      } else {
-        const addrId = selectedRadio.value;
-        const addr = availableBillingAddresses
-          .find((a) => String(a.id) === addrId);
-        billingAddress = addr?.attributes || addr;
-      }
-
-      const poNumber = block
-        .querySelector('input[name="poNumber"]')?.value || undefined;
       const customerNotes = block
         .querySelector('textarea[name="customerNotes"]')?.value || undefined;
 
-      // Single PATCH with all checkout data
-      await updateCheckout(checkoutId, {
-        shippingMethod: selectedShippingMethod,
-        shippingMethodType: selectedShippingMethodType,
-        paymentMethod: selectedPaymentMethod,
-        poNumber,
-        customerNotes,
+      // Single PATCH with billing address + payment
+      await patchCheckout(checkoutId, {
+        data: {
+          type: 'checkouts',
+          id: String(checkoutId),
+          attributes: {
+            paymentMethod: selectedPaymentMethod,
+            ...(customerNotes ? { customerNotes } : {}),
+          },
+          relationships: {
+            shippingAddress: {
+              data: { type: 'checkoutaddresses', id: 'shipping_address' },
+            },
+            billingAddress: {
+              data: { type: 'checkoutaddresses', id: 'billing_address' },
+            },
+          },
+        },
+        included: [
+          {
+            type: 'checkoutaddresses',
+            id: 'shipping_address',
+            relationships: {
+              customerUserAddress: {
+                data: { type: 'customeruseraddresses', id: savedAddressId },
+              },
+            },
+          },
+          {
+            type: 'checkoutaddresses',
+            id: 'billing_address',
+            relationships: {
+              customerUserAddress: {
+                data: { type: 'customeruseraddresses', id: savedAddressId },
+              },
+            },
+          },
+        ],
       });
 
-      // Validate — get payment URL
+      // Get payment URL
       const validation = await validateCheckout(checkoutId);
-      if (validation.errors && validation.errors.length > 0) {
-        showError(
-          validation.errors.map((e) => e.detail || e).join('<br>'),
-        );
+      const fullPaymentUrl = validation.meta?.paymentUrl;
+      if (!fullPaymentUrl) {
+        showError('Unable to process payment. Please try again or contact support.');
         placeOrderBtn.disabled = false;
         placeOrderBtn.textContent = labels.Global?.PlaceOrder || 'Place Order';
         hideLoader();
         return;
       }
 
+      // Extract path only — host in the URL may be invalid
+      const paymentPath = new URL(fullPaymentUrl).pathname;
+
       // Place order
-      const { paymentUrl } = validation;
-      const orderResult = await placeOrder(paymentUrl);
+      const orderResult = await placeOrder(paymentPath);
 
       hideLoader();
 
@@ -371,7 +333,24 @@ export default async function decorate(block) {
       document.cookie = 'oro_checkout_id=; path=/; max-age=0';
 
       // Show order confirmation
-      await displayOrderConfirmation(orderResult.orderId);
+      const orderIdentifier = orderResult.identifier || orderResult.orderId;
+      window.scrollTo(0, 0);
+      document.title = 'Order Confirmation';
+      block.innerHTML = `
+        <div class="checkout__wrapper">
+          <div class="checkout__content">
+            <div class="checkout__main">
+              <div class="checkout__empty-cart">
+                <h2>Your order #${orderIdentifier} has been successfully placed!</h2>
+                <a href="${rootLink('/')}"
+                  class="dropin-button dropin-button--primary">
+                  OK
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('Place order failed:', err);
@@ -381,269 +360,6 @@ export default async function decorate(block) {
       hideLoader();
     }
   });
-
-  // --- Order Confirmation ---
-  async function displayOrderConfirmation(orderId) {
-    window.scrollTo(0, 0);
-    document.title = 'Order Confirmation';
-
-    try {
-      const order = await getOrder(orderId);
-      const orderAttrs = order.attributes || {};
-      const orderCurrency = orderCurrencyId || orderCurrency || 'USD';
-      const lineItems = (order._resolved?.lineItems || [])
-        .map((li) => li.attributes);
-
-      block.innerHTML = `
-        <div class="order-confirmation">
-          <div class="order-confirmation__main">
-            <div class="order-confirmation__header">
-              <div class="dropin-card">
-                <h1>Thank you for your order!</h1>
-                <p>Order number: <strong>${orderAttrs.identifier || orderId}</strong></p>
-              </div>
-            </div>
-            <div class="order-confirmation__order-status">
-              <div class="dropin-card">
-                <h3>Order Status</h3>
-                <p>${orderAttrs.status || 'Processing'}</p>
-              </div>
-            </div>
-            <div class="order-confirmation__customer-details">
-              <div class="dropin-card">
-                <h3>Billing Address</h3>
-                ${formatAddress(orderAttrs.billingAddress)}
-              </div>
-            </div>
-          </div>
-          <div class="order-confirmation__aside">
-            <div class="order-confirmation__order-cost-summary">
-              <div class="dropin-card">
-                <h3>Order Total</h3>
-                <div class="order-summary__line">
-                  <span>Subtotal</span>
-                  <span>${formatPrice(orderAttrs.subtotalValue, orderCurrency)}</span>
-                </div>
-                <div class="order-summary__line">
-                  <span>Shipping</span>
-                  <span>${formatPrice(orderAttrs.shippingCostAmount, orderCurrency)}</span>
-                </div>
-                <div class="order-summary__line order-summary__total">
-                  <span><strong>Total</strong></span>
-                  <span><strong>${formatPrice(orderAttrs.total, orderCurrency)}</strong></span>
-                </div>
-              </div>
-            </div>
-            <div class="order-confirmation__order-product-list">
-              <div class="dropin-card">
-                <h3>Items Ordered</h3>
-                ${lineItems.map((li) => `
-                  <div class="order-item">
-                    <span>${li.productName || li.productSku}</span>
-                    <span>Qty: ${li.quantity}</span>
-                    <span>${formatPrice(
-    li.rowTotalValue || li.price,
-    li.currencyId || li.currency || orderCurrency,
-  )}</span>
-                  </div>
-                `).join('')}
-              </div>
-            </div>
-            <div class="order-confirmation__footer">
-              <a href="${rootLink('/')}"
-                class="dropin-button dropin-button--primary">
-                Continue Shopping
-              </a>
-              <p>Need help? <a href="${rootLink(SUPPORT_PATH)}">Contact us</a></p>
-            </div>
-          </div>
-        </div>
-      `;
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to load order details:', err);
-      block.innerHTML = `
-        <div class="order-confirmation">
-          <div class="order-confirmation__main">
-            <div class="dropin-card">
-              <h1>Order Placed Successfully!</h1>
-              <p>Order ID: ${orderId}</p>
-              <a href="${rootLink('/')}"
-                class="dropin-button dropin-button--primary">
-                Continue Shopping
-              </a>
-            </div>
-          </div>
-        </div>
-      `;
-    }
-  }
-}
-
-// --- Country/Region constants ---
-const COUNTRIES = [
-  { code: 'US', name: 'United States' },
-  { code: 'GB', name: 'United Kingdom' },
-  { code: 'CA', name: 'Canada' },
-  { code: 'AU', name: 'Australia' },
-];
-
-const DEFAULT_COUNTRY = 'US';
-
-// --- Helper: Build address form HTML ---
-function buildAddressFormHTML() {
-  const countryOptions = COUNTRIES.map(
-    (c) => `<option value="${c.code}"${c.code === DEFAULT_COUNTRY ? ' selected' : ''}>${c.name}</option>`,
-  ).join('');
-
-  return `
-    <form name="billingAddress" class="checkout__address-form">
-      <div class="form-row">
-        <label>First Name *<input type="text" name="firstName" required /></label>
-        <label>Last Name *<input type="text" name="lastName" required /></label>
-      </div>
-      <label>Organization<input type="text" name="organization" /></label>
-      <label>Street Address *<input type="text" name="street" required /></label>
-      <label>Apt / Suite<input type="text" name="street2" /></label>
-      <div class="form-row">
-        <label>City *<input type="text" name="city" required /></label>
-        <label>Region *
-          <select name="region" required>
-            <option value="">Loading...</option>
-          </select>
-        </label>
-      </div>
-      <div class="form-row">
-        <label>Postal Code *<input type="text" name="postalCode" required /></label>
-        <label>Country *
-          <select name="country" required>
-            ${countryOptions}
-          </select>
-        </label>
-      </div>
-      <label>Phone<input type="tel" name="phone" /></label>
-    </form>
-  `;
-}
-
-// --- Helper: Load regions into a select element ---
-async function loadRegions(form) {
-  const countrySelect = form.querySelector('select[name="country"]');
-  const regionSelect = form.querySelector('select[name="region"]');
-  if (!countrySelect || !regionSelect) return;
-
-  const countryCode = countrySelect.value;
-  regionSelect.innerHTML = '<option value="">Loading...</option>';
-  regionSelect.disabled = true;
-
-  try {
-    const regions = await getRegions(countryCode);
-    const list = regions.data || [];
-
-    if (list.length === 0) {
-      regionSelect.innerHTML = '<option value="">No regions available</option>';
-    } else {
-      regionSelect.innerHTML = `<option value="">Select a region</option>${list.map(
-        (r) => `<option value="${r.id}">${r.attributes.name}</option>`,
-      ).join('')}`;
-    }
-  } catch (_) {
-    regionSelect.innerHTML = '<option value="">Failed to load regions</option>';
-  }
-  regionSelect.disabled = false;
-}
-
-// --- Helper: Initialize address form (country change listener + initial regions) ---
-function initAddressForm(form) {
-  if (!form) return;
-  const countrySelect = form.querySelector('select[name="country"]');
-  if (!countrySelect) return;
-
-  countrySelect.addEventListener('change', () => loadRegions(form));
-  loadRegions(form);
-}
-
-// --- Helper: Render address selector with saved addresses ---
-function renderAddressSelector(container, addresses) {
-  container.innerHTML = `
-    <div class="dropin-header-container">
-      <div class="account-address-form-wrapper__title dropin-header-container__title">Billing Address</div>
-    </div>
-    <div class="checkout__address-selector"></div>
-  `;
-  const $selector = container.querySelector('.checkout__address-selector');
-
-  addresses.forEach((addr, index) => {
-    const a = addr.attributes || addr;
-    const label = document.createElement('label');
-    label.className = 'checkout__shipping-option';
-    label.innerHTML = `
-      <input type="radio" name="billingAddressSelection"
-        value="${addr.id || index}" ${index === 0 ? 'checked' : ''} />
-      <div>
-        <strong>${a.firstName || ''} ${a.lastName || ''}</strong><br>
-        ${a.organization ? `${a.organization}<br>` : ''}
-        ${a.street || ''}${a.street2 ? `, ${a.street2}` : ''}<br>
-        ${a.city || ''}, ${a.region || ''} ${a.postalCode || ''}<br>
-        ${a.country || ''}
-      </div>
-    `;
-    $selector.appendChild(label);
-  });
-
-  // "Enter a new address" option
-  const newAddrLabel = document.createElement('label');
-  newAddrLabel.className = 'checkout__shipping-option';
-  newAddrLabel.innerHTML = `
-    <input type="radio" name="billingAddressSelection" value="new" />
-    <span>Enter a new address</span>
-  `;
-  $selector.appendChild(newAddrLabel);
-
-  // Manual form (hidden initially)
-  const formWrapper = document.createElement('div');
-  formWrapper.className = 'checkout__manual-address-form';
-  formWrapper.hidden = true;
-  formWrapper.innerHTML = buildAddressFormHTML();
-  container.appendChild(formWrapper);
-
-  // Toggle form visibility and init form when shown
-  $selector.addEventListener('change', (e) => {
-    const isNew = e.target.value === 'new';
-    formWrapper.hidden = !isNew;
-    if (isNew && !formWrapper.dataset.initialized) {
-      initAddressForm(formWrapper.querySelector('form'));
-      formWrapper.dataset.initialized = 'true';
-    }
-  });
-}
-
-// --- Helper: Render manual address form directly ---
-function renderManualAddressForm(container) {
-  container.innerHTML = `
-    <div class="dropin-header-container">
-      <div class="account-address-form-wrapper__title dropin-header-container__title">Billing Address</div>
-    </div>
-    ${buildAddressFormHTML()}
-  `;
-  initAddressForm(container.querySelector('form'));
-}
-
-// --- Helper: Get address from form ---
-function getAddressFromForm(form) {
-  if (!form) return {};
-  return {
-    firstName: form.firstName?.value || '',
-    lastName: form.lastName?.value || '',
-    organization: form.organization?.value || '',
-    street: form.street?.value || '',
-    street2: form.street2?.value || '',
-    city: form.city?.value || '',
-    region: form.region?.value || '',
-    postalCode: form.postalCode?.value || '',
-    country: form.country?.value || 'US',
-    phone: form.phone?.value || '',
-  };
 }
 
 // --- Helper: Render order summary sidebar ---
@@ -656,19 +372,30 @@ function renderOrderSummary(checkout, shoppingList, $orderSummary, $cartSummary)
   const subtotal = subtotalEntry
     ? parseFloat(subtotalEntry.amount)
     : (attrs.subtotals?.subtotal || 0);
+  const discountEntry = (attrs.totals || [])
+    .find((t) => t.subtotalType === 'discount');
+  const discount = discountEntry ? Math.abs(parseFloat(discountEntry.amount)) : 0;
   const total = parseFloat(attrs.totalValue) || attrs.total || 0;
+
+  const discountLine = discount > 0
+    ? `<div class="order-summary__line">
+        <span>Discount</span>
+        <span>-${formatPriceSmart(discount, currency)}</span>
+      </div>`
+    : '';
 
   $orderSummary.innerHTML = `
     <div class="dropin-card">
       <h3>Order Summary</h3>
       <div class="order-summary__line">
         <span>Subtotal</span>
-        <span>${formatPrice(subtotal, currency)}</span>
+        <span>${formatPriceSmart(subtotal, currency)}</span>
       </div>
+      ${discountLine}
       <div class="dropin-divider"></div>
       <div class="order-summary__line order-summary__total">
         <span><strong>Total</strong></span>
-        <span><strong>${formatPrice(total, currency)}</strong></span>
+        <span><strong>${formatPriceSmart(total, currency)}</strong></span>
       </div>
     </div>
   `;
@@ -688,24 +415,15 @@ function renderOrderSummary(checkout, shoppingList, $orderSummary, $cartSummary)
       || 'Item';
     const quantity = item.attributes?.quantity || 1;
     const priceInfo = product ? getProductPrice(product) : null;
-    const lineTotal = priceInfo ? priceInfo.price * quantity : 0;
+    const rawLineTotal = priceInfo ? priceInfo.price * quantity : 0;
     const lineCurrency = priceInfo?.currency || currency;
+    const lineTotal = convertCurrency(rawLineTotal, lineCurrency, currency);
     return `<div class="checkout__line-item">
             <span>${productName}</span>
-            <span>${formatPrice(lineTotal, lineCurrency)}</span>
+            <span>${formatPrice(lineTotal, currency)}</span>
           </div>`;
   }).join('')}
       </div>
     `;
   }
-}
-
-// --- Helper: Format address ---
-function formatAddress(addr) {
-  if (!addr) return '<p>N/A</p>';
-  return `<p>${addr.firstName || ''} ${addr.lastName || ''}<br>
-    ${addr.organization ? `${addr.organization}<br>` : ''}
-    ${addr.street || ''}${addr.street2 ? `, ${addr.street2}` : ''}<br>
-    ${addr.city || ''}, ${addr.region || ''} ${addr.postalCode || ''}<br>
-    ${addr.country || ''}</p>`;
 }

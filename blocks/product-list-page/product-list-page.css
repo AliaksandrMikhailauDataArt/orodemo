@@ -516,7 +516,7 @@
     .block.product-list-page .search__filter-panel {
         display: block;
         position: sticky;
-        top: var(--spacing-small);
+        top: calc(86px + var(--spacing-small));
     }
 
     .block.product-list-page .filter-panel__close {

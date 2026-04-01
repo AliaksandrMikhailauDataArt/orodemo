@@ -492,6 +492,7 @@
 .checkout__empty-cart {
     text-align: center;
     padding: var(--spacing-xxbig) var(--spacing-medium);
+    margin: 40px 0;
     background: var(--color-neutral-50);
     border-radius: 8px;
     box-shadow: 0 2px 8px rgb(0 0 0 / 8%);

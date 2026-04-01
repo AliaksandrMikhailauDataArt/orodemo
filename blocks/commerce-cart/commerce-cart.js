@@ -6,6 +6,8 @@ import {
 } from '../../scripts/oro-api.js';
 import {
   formatPrice,
+  formatPriceSmart,
+  convertCurrency,
 } from '../../scripts/oro-utils.js';
 import { readBlockConfig } from '../../scripts/aem.js';
 import {
@@ -105,8 +107,10 @@ export default async function decorate(block) {
       const product = item._product;
       const productName = product?.attributes?.name || 'Product';
       const shortDesc = product?.attributes?.shortDescription || '';
-      const linePrice = item.attributes?.value || 0;
-      const currency = item.attributes?.currencyId || item.attributes?.currency || cartData.currency || 'USD';
+      const rawLinePrice = item.attributes?.value || 0;
+      const itemCurrency = item.attributes?.currencyId || item.attributes?.currency || 'USD';
+      const cartCurrency = cartData.currency || 'USD';
+      const linePrice = convertCurrency(rawLinePrice, itemCurrency, cartCurrency);
       const productUrl = rootLink(`/catalog/product?productid=${product?.id || ''}`);
 
       const itemEl = document.createElement('div');
@@ -126,7 +130,7 @@ export default async function decorate(block) {
 
       const priceDiv = document.createElement('div');
       priceDiv.className = 'cart__item-price';
-      priceDiv.textContent = formatPrice(linePrice, currency);
+      priceDiv.textContent = formatPrice(linePrice, cartCurrency);
 
       const removeBtn = document.createElement('button');
       removeBtn.className = 'cart__item-remove';
@@ -180,6 +184,14 @@ export default async function decorate(block) {
 
     const checkoutLabel = placeholders.Global?.Checkout || 'Proceed to Checkout';
 
+    const discount = Math.abs(parseFloat(cartData.discount) || 0);
+    const discountLine = discount > 0
+      ? `<div class="cart__summary-line">
+          <span>Discount</span>
+          <span>-${formatPriceSmart(discount, currency)}</span>
+        </div>`
+      : '';
+
     $summary.innerHTML = `
       <div class="cart-cart-summary-list">
         <div class="cart-cart-summary-list__heading">
@@ -187,11 +199,12 @@ export default async function decorate(block) {
         </div>
         <div class="cart__summary-line">
           <span>Subtotal</span>
-          <span>${formatPrice(cartData.subtotal, currency)}</span>
+          <span>${formatPriceSmart(cartData.subtotal, currency)}</span>
         </div>
+        ${discountLine}
         <div class="cart__summary-total dropin-divider">
           <span><strong>Estimated Total</strong></span>
-          <span><strong>${formatPrice(cartData.subtotal, currency)}</strong></span>
+          <span><strong>${formatPriceSmart(cartData.total || cartData.subtotal, currency)}</strong></span>
         </div>
         <button class="dropin-button dropin-button--primary cart__checkout-btn">
           ${checkoutLabel}

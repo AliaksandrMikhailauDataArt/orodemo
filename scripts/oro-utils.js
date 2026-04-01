@@ -63,7 +63,39 @@ export function formatPrice(amount, currency = 'USD') {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
-  }).format(amount);
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(Math.round(amount));
+}
+
+export function formatPriceSmart(amount, currency = 'USD') {
+  if (amount == null) return '';
+  const num = Number(amount);
+  const hasDecimals = num % 1 !== 0;
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: hasDecimals ? 1 : 0,
+    maximumFractionDigits: 2,
+  }).format(num);
+}
+
+const USD_TO_GBP_RATE = 0.75;
+
+/**
+ * Convert a price from one currency to another.
+ * Currently supports USD → GBP at a fixed 0.75 rate.
+ * @param {number} amount
+ * @param {string} fromCurrency
+ * @param {string} toCurrency
+ * @returns {number} Converted and rounded amount
+ */
+export function convertCurrency(amount, fromCurrency, toCurrency) {
+  if (fromCurrency === toCurrency || !amount) return amount || 0;
+  if (fromCurrency === 'USD' && toCurrency === 'GBP') {
+    return amount * USD_TO_GBP_RATE;
+  }
+  return amount;
 }
 
 /**
