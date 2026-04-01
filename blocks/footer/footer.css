@@ -27,7 +27,6 @@ footer h2,
 footer h3,
 footer h4 {
     color: rgb(178 227 255);
-    font-size: 0.875rem;
     font-weight: 500;
     line-height: 1.57;
     letter-spacing: -0.36px;
@@ -41,7 +40,9 @@ footer .footer > div {
 }
 
 footer .footer p {
-    margin: 0;
+    margin: 0 0 24px;
+    border-bottom: 1px solid rgb(178 227 255 / 20%);
+    padding-bottom: 24px;
 }
 
 /* ===================================================================
@@ -102,6 +103,7 @@ footer .footer p {
 /* ===================================================================
    Footer Content Styles
    =================================================================== */
+
 /* stylelint-disable no-descending-specificity -- storeview modal is a separate DOM tree */
 footer .footer ul {
     list-style: none;
@@ -185,7 +187,6 @@ footer .footer ul li button:hover {
     /* Bottom bar links */
     footer .footer > div > div:last-child a {
         color: #dfe4ef;
-        font-size: 0.875rem;
         font-weight: 500;
         line-height: 1.57;
         letter-spacing: -0.36px;
@@ -200,7 +201,6 @@ footer .footer ul li button:hover {
     footer .footer > div > div:last-child ul li a,
     footer .footer > div > div:last-child ul li button {
         padding: 0;
-        font-size: 0.875rem;
         color: #dfe4ef;
     }
 
